@@ -6,10 +6,10 @@ import matplotlib.patches as patches
 import plotly.graph_objects as go
 
 # --- 1. SET UP PAGE ---
-st.set_page_config(page_title="Enterprise Footing Suite V5.7", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V5.8", page_icon="🏗️", layout="wide")
 
-st.title("🏗️ Enterprise Footing Suite (V5.7 - Code-Compliant Masterpiece)")
-st.markdown("ระบบวิเคราะห์ฐานรากชั้นสูง | แก้ไขตรรกะโมเมนต์ลบ + ระบบดักจับ Over-reinforced + แยกขาดหน่วยแรงเฉือนฐานราก")
+st.title("🏗️ Enterprise Footing Suite (V5.8 - Robust Production Masterpiece)")
+st.markdown("ระบบวิเคราะห์ฐานรากชั้นสูง | ป้องกันกราฟล่มจากเหล็กเกิน + ปรับปรุงลูปความหนา Shear-First + ตรวจสอบระยะขอบ Spalling")
 st.markdown("---")
 
 # --- 2. SIDEBAR PARAMETERS ---
@@ -21,7 +21,6 @@ with st.sidebar:
     pile_shape = st.selectbox("รูปทรงหน้าตัดเสาเข็ม:", ["สี่เหลี่ยมตัน (Square Pile)", "กลมกลวง/สปัน (Spun Pile)", "กลมตัน/เข็มเจาะ (Solid Round Pile)"])
     pile_size = st.number_input("ขนาดเส้นผ่านศูนย์กลางภายนอก หรือความกว้างเสาเข็ม (เมตร)", value=0.30, step=0.05)
     
-    # พารามิเตอร์ความหนาผนังเสาเข็มสำหรับ Spun Pile (ใช้สำหรับแสดงผลทางกายภาพเท่านั้น ไม่นำไปลดทอนแรงเฉือนฐานราก)
     wall_thickness = 0.0
     if pile_shape == "กลมกลวง/สปัน (Spun Pile)":
         wall_thickness_cm = st.slider("ความหนาของผนังเสาเข็ม Spun Pile (ซม.)", min_value=5, max_value=12, value=6, step=1)
@@ -120,20 +119,35 @@ x_min_edge = min(p[0] for p in piles_actual) - E_dist
 y_max_edge = max(p[1] for p in piles_actual) + E_dist
 y_min_edge = min(p[1] for p in piles_actual) - E_dist
 
+# --- 🛑 [FEATURE 3] AS-BUILT EDGE DISTANCE CHECK ENGINE ---
+min_edge_dist = float('inf')
+for px, py in piles_actual:
+    r_outer = pile_size / 2
+    d_left = px - r_outer - x_min_edge
+    d_right = x_max_edge - (px + r_outer)
+    d_bottom = py - r_outer - y_min_edge
+    d_top = y_max_edge - (py + r_outer)
+    local_min = min(d_left, d_right, d_bottom, d_top)
+    if local_min < min_edge_dist:
+        min_edge_dist = local_min
+
+edge_distance_alert = min_edge_dist < 0.10
+
+if edge_distance_alert:
+    st.error(f"⚠️ [Edge Distance Alert] ตรวจพบระยะห่างจากผิวเสาเข็มถึงขอบฐานรากสั้นที่สุดคือ {min_edge_dist*100:.1f} ซม. ซึ่งน้อยกว่า 10 ซม. เสี่ยงต่อการเกิด Concrete Spalling หน้างาน!")
+
 # --- 6. CORE STRUCTURAL EVALUATION ENGINE ---
 d = 0.40 if thickness_mode == "คำนวณอัตโนมัติ (Auto-Optimize)" else (manual_t - 0.15)
 t = 0.55 if thickness_mode == "คำนวณอัตโนมัติ (Auto-Optimize)" else manual_t
 
 has_tension = False
-loop_break_by_guard = False
-over_reinforced_global_error = False
+pile_overload_warning = False
 shear_fail_manual = False
 
 v_u_stress, v_c_allowable = 0.0, 0.0
 v_u_wb_stress, v_c_wb_allowable = 0.0, 0.0
 pile_service_loads = [0.0] * n_piles
 pile_ultimate_loads = [0.0] * n_piles
-previous_max_R = float('inf')
 r_outer = pile_size / 2
 
 def run_structural_calculation_core(current_d, current_t):
@@ -159,7 +173,7 @@ def run_structural_calculation_core(current_d, current_t):
     min_R = min(pile_service_loads)
     has_tension = min_R < 0
     
-    # 🛑 [CORRECTION 2] ตรวจสอบ Punching Shear บนเนื้อคอนกรีตฐานรากเต็มหน้าตัด (ไม่มีการหักรูเจาะ Spun Pile)
+    # ตรวจสอบ Punching Shear บนเนื้อคอนกรีตเต็มหน้าตัด
     b1 = cx + current_d
     b2 = cy + current_d
     bo = 2 * (b1 + b2)
@@ -180,7 +194,7 @@ def run_structural_calculation_core(current_d, current_t):
     vc3 = 1.06 * math.sqrt(fc_prime)
     v_c_allowable = phi_v * min(vc1, vc2, vc3)
     
-    # Wide Beam Shear Check (4-Faces) หน้าตัดเนื้อคอนกรีตฐานรากเต็มพิกัดเช่นกัน
+    # Fractional Wide Beam Shear Check (4-Faces)
     X_crit_pos = cx/2 + current_d
     X_crit_neg = -cx/2 - current_d
     Y_crit_pos = cy/2 + current_d
@@ -204,33 +218,42 @@ def run_structural_calculation_core(current_d, current_t):
     
     return (v_u_stress <= v_c_allowable) and (v_u_wb_stress <= v_c_wb_allowable)
 
-# เริ่มต้นลูปคำนวณแยกโหมดทำงาน
+# --- 🛑 [FEATURE 2] AMENDED AUTO-OPTIMIZE LOOP (SHEAR-FIRST ENFORCEMENT) ---
 if thickness_mode == "คำนวณอัตโนมัติ (Auto-Optimize)":
     while d < 3.0:
         t = math.ceil((d + 0.15) * 20) / 20
-        is_safe = run_structural_calculation_core(d, t)
+        shear_safe = run_structural_calculation_core(d, t)
+        
+        # วนลูปจนกว่าค่าเฉือนวิกฤตทั้งหมดจะผ่านเกณฑ์ร้อยเปอร์เซ็นต์
+        if not shear_safe:
+            d += 0.02
+            continue
+            
+        # ตรวจสอบขีดจำกัดเสาเข็มภายหลังที่แรงเฉือนผ่านแล้วเท่านั้น
         max_R = max(pile_service_loads)
         min_R = min(pile_service_loads)
+        pile_overloaded = (max_R > pile_cap) or (has_tension and abs(min_R) > pile_tension_cap)
         
-        if (max_R > pile_cap or (has_tension and abs(min_R) > pile_tension_cap)) and max_R >= previous_max_R:
-            loop_break_by_guard = True
+        if pile_overloaded:
+            pile_overload_warning = True
             break
-        previous_max_R = max_R
-        
-        if is_safe and (max_R <= pile_cap) and (not has_tension or abs(min_R) <= pile_tension_cap):
+        else:
             break
-        d += 0.02
 else:
     t = manual_t
     d = t - 0.15
-    is_safe = run_structural_calculation_core(d, t)
-    if not is_safe or (max(pile_service_loads) > pile_cap):
+    shear_safe = run_structural_calculation_core(d, t)
+    if not shear_safe:
         shear_fail_manual = True
+    max_R = max(pile_service_loads)
+    min_R = min(pile_service_loads)
+    if (max_R > pile_cap) or (has_tension and abs(min_R) > pile_tension_cap):
+        pile_overload_warning = True
 
 d_actual = t - 0.15
-w_u_sw_floor = 1.2 * t * 2.4 # น้ำหนักประลัยฐานรากต่อตารางเมตร (ตัน/ตร.ม.)
+w_u_sw_floor = 1.2 * t * 2.4 
 
-# 🛑 [CORRECTION 3] ตรรกะกลศาสตร์รวมสำหรับโมเมนต์ดัดตามขอบตอม่อ (พิจารณาน้ำหนักฐานรากยื่นร่วมด้วย)
+# ตรรกะสมดุลกลศาสตร์รวมโมเมนต์ดัดตามขอบตอม่อ
 M_u_X_pos_plane = sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2) - 0.5 * w_u_sw_floor * ((x_max_edge - cx/2)**2) * L_ft
 M_u_X_neg_plane = sum(pile_ultimate_loads[i] * (-cx/2 - p[0]) for i, p in enumerate(piles_actual) if p[0] < -cx/2) - 0.5 * w_u_sw_floor * ((-cx/2 - x_min_edge)**2) * L_ft
 M_u_Y_pos_plane = sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2) - 0.5 * w_u_sw_floor * ((y_max_edge - cy/2)**2) * B_ft
@@ -241,8 +264,8 @@ M_u_X_top = max(0.0, -M_u_X_pos_plane, -M_u_X_neg_plane)
 M_u_Y_bot = max(0.0, M_u_Y_pos_plane, M_u_Y_neg_plane)
 M_u_Y_top = max(0.0, -M_u_Y_pos_plane, -M_u_Y_neg_plane)
 
-# 🛑 [CORRECTION 1] ฟังก์ชันคำนวณจัดเหล็กเสริมพร้อมระบบตรวจสอบ Over-reinforced Section ป้องกันแอปพลิเคชันล่ม
-def design_steel_flexure_v57(M_u_val, w_cm, d_cm, t_cm, f_c, f_y):
+# ฟังก์ชันจัดเหล็กเสริมพร้อมระบบตรวจสอบ Over-reinforced Section
+def design_steel_flexure_v58(M_u_val, w_cm, d_cm, t_cm, f_c, f_y):
     As_min = 0.0018 * w_cm * t_cm
     if M_u_val <= 0:
         n_bars = max(math.ceil(As_min / ab), 6)
@@ -252,16 +275,13 @@ def design_steel_flexure_v57(M_u_val, w_cm, d_cm, t_cm, f_c, f_y):
     M_u_kg_cm = M_u_val * 1000 * 100
     Rn = M_u_kg_cm / (phi_b * w_cm * d_cm**2)
     
-    # คำนวณขีดจำกัดสูงสุดตามมาตรฐานวิศวกรรมควบคุมป้องกันการวิบัติแบบเปราะ
     beta_1 = 0.85 if f_c <= 280 else max(0.65, 0.85 - 0.05 * (f_c - 280) / 70)
     rho_b = 0.85 * beta_1 * (f_c / f_y) * (6120 / (6120 + f_y))
-    rho_max = 0.75 * rho_b  # อัตราส่วนเหล็กเสริมสูงสุดที่อนุญาตให้สอดคล้องกับมาตรฐานความปลอดภัย
-    
+    rho_max = 0.75 * rho_b  
     Rn_max = rho_max * f_y * (1 - 0.59 * rho_max * f_y / f_c)
     
-    # ตรวจจับวิกฤต Math Crash และ Over-reinforced Section
     if (2 * Rn) / (0.85 * f_c) >= 1.0 or Rn > Rn_max:
-        return 0, 0, False, True  # ส่งสัญญาณ Flag ความผิดพลาดทันที
+        return 0, 0, False, True  
         
     rho = (0.85 * f_c / f_y) * (1 - math.sqrt(1 - (2 * Rn) / (0.85 * f_c)))
     if rho > rho_max:
@@ -278,11 +298,10 @@ def design_steel_flexure_v57(M_u_val, w_cm, d_cm, t_cm, f_c, f_y):
         sp = math.floor((w_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
     return n_bars, sp, (sp < max(1.5 * (bar_dia / 10), 2.5)), False
 
-# รันระบบคำนวณเหล็กสี่ทิศทาง
-num_X_bot, sp_X_bot, cong_X_bot, err_X_bot = design_steel_flexure_v57(M_u_X_bot, B_ft*100, d_actual*100, t*100, fc_prime, fy)
-num_Y_bot, sp_Y_bot, cong_Y_bot, err_Y_bot = design_steel_flexure_v57(M_u_Y_bot, L_ft*100, d_actual*100, t*100, fc_prime, fy)
-num_X_top, sp_X_top, cong_X_top, err_X_top = design_steel_flexure_v57(M_u_X_top, B_ft*100, d_actual*100, t*100, fc_prime, fy)
-num_Y_top, sp_Y_top, cong_Y_top, err_Y_top = design_steel_flexure_v57(M_u_Y_top, L_ft*100, d_actual*100, t*100, fc_prime, fy)
+num_X_bot, sp_X_bot, cong_X_bot, err_X_bot = design_steel_flexure_v58(M_u_X_bot, B_ft*100, d_actual*100, t*100, fc_prime, fy)
+num_Y_bot, sp_Y_bot, cong_Y_bot, err_Y_bot = design_steel_flexure_v58(M_u_Y_bot, L_ft*100, d_actual*100, t*100, fc_prime, fy)
+num_X_top, sp_X_top, cong_X_top, err_X_top = design_steel_flexure_v58(M_u_X_top, B_ft*100, d_actual*100, t*100, fc_prime, fy)
+num_Y_top, sp_Y_top, cong_Y_top, err_Y_top = design_steel_flexure_v58(M_u_Y_top, L_ft*100, d_actual*100, t*100, fc_prime, fy)
 
 any_over_reinforced = err_X_bot or err_Y_bot or err_X_top or err_Y_top
 any_congested = cong_X_bot or cong_Y_bot or cong_X_top or cong_Y_top
@@ -312,9 +331,17 @@ ax_plan.grid(True, linestyle=':', alpha=0.5)
 
 # Cross Section Plot
 ax_sec.add_patch(patches.Rectangle((-B_ft/2, 0), B_ft, t, linewidth=2, edgecolor='#2c3e50', facecolor='#eaeded'))
-ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [0.075, 0.075], color='#1f618d', linewidth=2.5)
-ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [t-0.075, t-0.075], color='#27ae60', linewidth=2.0, linestyle='--')
-ax_sec.text(0, t/2, f"Thickness t = {t*100:.0f} cm\nBot X: DB{bar_dia} @ {sp_X_bot} cm\nTop X: DB{bar_dia} @ {sp_X_top} cm" if not any_over_reinforced else "CRITICAL ERROR:\nOVER-REINFORCED", ha='center', va='center', color='#2c3e50', fontsize=9, fontweight='bold')
+
+# --- 🛑 [FEATURE 1] SAFETY GRAPH GUARD FOR OVER-REINFORCED CRASH ---
+if any_over_reinforced:
+    # เคลียร์เส้นเหล็กทั้งหมดออก และเขียนข้อความเตือนตัวใหญ่ตรงกลางหน้าตัด
+    ax_sec.text(0, t/2, "CROSS-SECTION OVER-REINFORCED:\nPLEASE INCREASE THICKNESS", 
+                ha='center', va='center', color='#c0392b', fontsize=11, fontweight='bold')
+else:
+    ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [0.075, 0.075], color='#1f618d', linewidth=2.5)
+    ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [t-0.075, t-0.075], color='#27ae60', linewidth=2.0, linestyle='--')
+    ax_sec.text(0, t/2, f"Thickness t = {t*100:.0f} cm\nBot X: DB{bar_dia} @ {sp_X_bot} cm\nTop X: DB{bar_dia} @ {sp_X_top} cm", ha='center', va='center', color='#2c3e50', fontsize=9, fontweight='bold')
+
 ax_sec.set_xlim(-B_ft/2 - 0.3, B_ft/2 + 0.3)
 ax_sec.set_ylim(-0.1, t + 0.5)
 ax_sec.set_aspect('equal')
@@ -328,18 +355,18 @@ with tab1:
     st.markdown("### 🏢 สรุปความหนาและมิติโครงสร้างควบคุม")
     st.info(f"📐 **ความหนาฐานรากทั้งหมด (Total Thickness, t):** {t*100:.0f} ซม. | **ความหนาประสิทธิผล (Effective Depth, d):** {d_actual*100:.0f} ซม.")
     
-    # แสดงบล็อกแจ้งเตือนข้อผิดพลาดพฤติกรรมโครงสร้างตามจริง
     if any_over_reinforced:
-        st.error("🚨 [CRITICAL FLEXURE ERROR - OVER-REINFORCED SECTION] ปริมาณเหล็กเสริมดึงหน้าตัดวิกฤตสูงเกินพิกัดควบคุม ($\rho > \rho_{max}$) เสี่ยงต่อการวิบัติพังทลายแบบเปราะในเนื้อคอนกรีตทันที มาตรฐาน ACI/มยผ. ห้ามออกแบบลักษณะนี้เด็ดขาด! แก้ไข: กรุณาเพิ่มความหนาฐานราก t ในช่องกรอกไซด์บาร์ทันที")
+        st.error("🚨 [CRITICAL FLEXURE ERROR - OVER-REINFORCED SECTION] ปริมาณเหล็กเสริมดึงหน้าตัดวิกฤตสูงเกินพิกัดควบคุม (rho > rho_max) เสี่ยงต่อการวิบัติพังทลายแบบเปราะในเนื้อคอนกรีตทันที มาตรฐาน ACI/มยผ. ห้ามออกแบบลักษณะนี้เด็ดขาด! แก้ไข: กรุณาเพิ่มความหนาฐานราก t ในช่องกรอกไซด์บาร์ทันที")
     elif shear_fail_manual:
         st.error("🚨 [OVERSTRESS ALERT] ในโหมดกรอกมือ ความหนาที่ใส่เข้ามาต่ำเกินไปจนหน่วยแรงเฉือนทะลุพังลิมิต! กรุณาเพิ่มค่าตัวเลขหนา t")
     else:
         st.success("✅ พฤติกรรมแรงเฉือนและสัดส่วนปริมาณเหล็กเสริมผ่านเกณฑ์ตามมาตรฐานวิศวกรรมควบคุมความปลอดภัย")
 
-    st.caption("ℹ️ *หมายเหตุความปลอดภัยแรงเฉือน:* ตามหลักกลศาสตร์ร่วม หน่วยแรงเฉือนวิกฤตจะถูกคำนวณและตรวจสอบบนเนื้อคอนกรีตฐานรากเต็มหน้าตัดโดยไม่มีการหักพื้นที่รูกลวงของเข็มสปันออก เพื่อรักษามาตรฐานความต้านทานแรงทะลุสูงสุดให้หน้างาน")
+    if pile_overload_warning:
+        st.warning("⚠️ [Pile Overload Warning] น้ำหนักบรรทุกในเสาเข็มบางต้นเกินพิกัดระบุปลอดภัยปลอดภัย (Pile Capacity Overloaded) เนื่องจากน้ำหนักฐานรากหนาขึ้น กรุณาพิจารณาเพิ่มจำนวนเข็มหรือปรับ Grid เสาเข็ม")
 
     if t >= 0.60:
-        st.warning(f"⚠️ [Skin Reinforcement Note] ความหนาฐานราก t = {t*100:.0f} ซม. ($\ge 60$ ซม.) ต้องเสริมเหล็กผิวข้าง (Side Face) เพื่อต้านทานการแตกร้าวเนื่องจากอุณหภูมิ")
+        st.warning(f"⚠️ [Skin Reinforcement Note] ความหนาฐานราก t = {t*100:.0f} ซม. (>= 60 ซม.) ต้องเสริมเหล็กผิวข้าง (Side Face) เพื่อต้านทานการแตกร้าวเนื่องจากอุณหภูมิ")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("ขนาดฐานราก กว้าง x ยาว", f"{B_ft:.2f} x {L_ft:.2f} ม.")
