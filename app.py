@@ -38,10 +38,15 @@ with st.sidebar:
     fy = st.selectbox("กำลังครากเหล็กเสริม fy (ksc)", [4000, 5000], index=0)
     bar_dia = st.selectbox("ขนาดเหล็กหลัก (มม.)", [12, 16, 20, 25], index=1)
 
-# --- 3. STRUCTURAL MECHANICS CALCULATION ---
+# --- 3. INITIALIZE STATE VARIABLES (ป้องกัน NameError) ---
+V_u_wb_kg = 0.0
+V_u_p_kg = 0.0
+phi_V_c_wb_kg = 0.0
+phi_V_c_p_kg = 0.0
+
 P_service = DL + LL
 P_ultimate = (1.4 * DL) + (1.7 * LL)
-Mu_cx = 1.4 * Mcx if Mcx > 0 else 0 # หรือปรับตาม Load Combination ที่ต้องการ
+Mu_cx = 1.4 * Mcx if Mcx > 0 else 0 
 Mu_cy = 1.4 * Mcy if Mcy > 0 else 0
 
 phi_v, phi_b = 0.85, 0.90
@@ -59,13 +64,11 @@ if footing_type == "ฐานรากแผ่ (Shallow)":
     gamma_avg = 2.0
     q_net_all = q_all - (gamma_avg * Df)
     
-    # คำนวณขนาดเบื้องต้น (พิจารณาเผื่อโมเมนต์เผื่อเลือกสี่เหลี่ยมจัตุรัส)
     A_req = P_service / q_net_all
     B = math.ceil(math.sqrt(A_req) * 20) / 20
     if B < 1.0: B = 1.0
     L = B
     
-    # ลูปหาความหนา d และตรวจสอบแรงดันดินไม่ให้ติดลบหรือเกิน q_net_all
     d = 0.20
     while d < 2.5:
         t = math.ceil((d + 0.075) * 20) / 20
@@ -73,28 +76,25 @@ if footing_type == "ฐานรากแผ่ (Shallow)":
         P_total_service = P_service + W_f
         P_total_ultimate = P_ultimate + (1.4 * W_f)
         
-        # ตรวจสอบแรงดันดินที่ขอบ (Biaxial Stress)
-        # q = P/A +- Mx/Zx +- My/Zy
         Zx = (B * L**2) / 6
         Zy = (L * B**2) / 6
         q_max = (P_total_service / (B*L)) + (Mcx / Zx) + (Mcy / Zy)
         q_min = (P_total_service / (B*L)) - (Mcx / Zx) - (Mcy / Zy)
         
-        # แรงดันดินประลัยสำหรับออกแบบโครงสร้าง
         qu_max = (P_total_ultimate / (B*L)) + (Mu_cx / Zx) + (Mu_cy / Zy)
         
         # ตรวจสอบแรงเฉือนคานกว้าง
         dist_x = (B - cx)/2 - d
-        V_u_wb = qu_max * L * dist_x * 1000 if dist_x > 0 else 0
-        phi_V_c_wb = phi_v * vc_wb * (L * 100) * (d * 100)
+        V_u_wb_kg = qu_max * L * dist_x * 1000 if dist_x > 0 else 0
+        phi_V_c_wb_kg = phi_v * vc_wb * (L * 100) * (d * 100)
         
         # ตรวจสอบแรงเฉือนทะลุ
         bo = 2 * ((cx + d) + (cy + d))
         A_punch = (B * L) - ((cx + d) * (cy + d))
-        V_u_p = (qu_max * A_punch) * 1000
-        phi_V_c_p = phi_v * vc_p * (bo * 100) * (d * 100)
+        V_u_p_kg = (qu_max * A_punch) * 1000
+        phi_V_c_p_kg = phi_v * vc_p * (bo * 100) * (d * 100)
         
-        if (V_u_wb <= phi_V_c_wb) and (V_u_p <= phi_V_c_p) and (q_max <= q_net_all) and (q_min >= 0):
+        if (V_u_wb_kg <= phi_V_c_wb_kg) and (V_u_p_kg <= phi_V_c_p_kg) and (q_max <= q_net_all) and (q_min >= 0):
             break
         d += 0.01
         if q_max > q_net_all or q_min < 0:
@@ -109,11 +109,10 @@ if footing_type == "ฐานรากแผ่ (Shallow)":
     status_msg = f"✅ ฐานรากแผ่สำเร็จ ขนาด {B:.2f}x{L:.2f} ม. (แรงดันดิน Max: {q_max:.2f} t/m²)"
 
 else:
-    # --- ตรรกะฐานรากเสาเข็ม (Advanced Coordinate System Matrix) ---
+    # --- ตรรกะฐานรากเสาเข็ม ---
     S = 3 * pile_size
     E = max(pile_size, 0.30)
     
-    # 1. กำหนดพิกัดเสาเข็มรอบจุดศูนย์กลางตอม่อ (0,0)
     if n_piles == 2:
         piles = [(-S/2, 0), (S/2, 0)]
         B_init = S + 2*E
@@ -135,24 +134,20 @@ else:
     B = ft_x_max - ft_x_min
     L = ft_y_max - ft_y_min
 
-    # คำนวณคุณสมบัติหน้าตัดกลุ่มเสาเข็ม (Inertia of Pile Group)
     sum_x2 = sum(p[0]**2 for p in piles)
     sum_y2 = sum(p[1]**2 for p in piles)
     
-    # วนลูปคำนวณหาเสถียรภาพความหนาและแรงลงเข็มสะสมน้ำหนักตัวเอง
     d = 0.25
     while d < 2.5:
-        t = math.ceil((d + 0.15) * 20) / 20 # อมหัวเข็ม 10cm + เคลียร์ริ่ง 5cm
+        t = math.ceil((d + 0.15) * 20) / 20
         W_f = B * L * t * 2.4
         
         P_tot_service = P_service + W_f
         P_tot_ultimate = P_ultimate + (1.4 * W_f)
         
-        # คำนวณแรงปฏิกิริยาในเสาเข็มแต่ละต้น (Service Load & Ultimate Load)
         pile_service_loads = []
         pile_ultimate_loads = []
         for px, py in piles:
-            # ใช้งานสูตร P/n + My*x/I_y + Mx*y/I_x
             R_i = (P_tot_service / n_piles) + (Mcy * px / sum_x2 if sum_x2 > 0 else 0) + (Mcx * py / sum_y2 if sum_y2 > 0 else 0)
             U_i = (P_tot_ultimate / n_piles) + (Mu_cy * px / sum_x2 if sum_x2 > 0 else 0) + (Mu_cx * py / sum_y2 if sum_y2 > 0 else 0)
             pile_service_loads.append(R_i)
@@ -160,7 +155,7 @@ else:
             
         max_R = max(pile_service_loads)
         
-        # ตรวจสอบแรงเฉือนทะลุหน้าตัดวิกฤต (d/2 จากขอบเสา)
+        # ตรวจสอบแรงเฉือนทะลุ
         V_u_p_kg = 0
         for i, (px, py) in enumerate(piles):
             if abs(px) > (cx/2 + d/2) or abs(py) > (cy/2 + d/2):
@@ -168,7 +163,7 @@ else:
         bo = 2 * ((cx + d) + (cy + d))
         phi_V_c_p_kg = phi_v * vc_p * (bo * 100) * (d * 100)
         
-        # ตรวจสอบแรงเฉือนคานกว้าง (ระยะ d จากขอบเสา)
+        # ตรวจสอบแรงเฉือนคานกว้าง
         V_wb_X = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[0] > cx/2 + d),
                      sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[0] < -(cx/2 + d)))
         V_wb_Y = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[1] > cy/2 + d),
@@ -188,7 +183,6 @@ else:
     V_u_wb_kg = max(V_wb_X, V_wb_Y)
     phi_V_c_wb_kg = phi_V_c_wb_X if V_wb_X >= V_wb_Y else phi_V_c_wb_Y
     
-    # คำนวณโมเมนต์แยกแกนวิกฤตที่ผิวตอม่อ
     M_u_X = max(sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles) if p[0] > cx/2),
                 sum(pile_ultimate_loads[i] * (abs(p[0]) - cx/2) for i, p in enumerate(piles) if p[0] < -cx/2))
     M_u_Y = max(sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles) if p[1] > cy/2),
@@ -214,9 +208,8 @@ def design_steel(M_u_val, width_cm, d_cm, t_cm):
 num_bars_X, spacing_X, As_X = design_steel(M_u_X, B*100, d_actual*100, t*100)
 num_bars_Y, spacing_Y, As_Y = design_steel(M_u_Y, L*100, d_actual*100, t*100)
 
-# ประมาณการปริมาณวัสดุ (BOA Estimator)
 concrete_vol = B * L * t
-est_steel_weight = (((num_bars_X * B) + (num_bars_Y * L)) * (ab * 0.00785 * 100)) # น้ำหนักเหล็ก (kg)
+est_steel_weight = (((num_bars_X * B) + (num_bars_Y * L)) * (ab * 0.00785 * 100))
 
 # --- 5. UI DASHBOARD DISPLAY ---
 if "❌" in status_msg: st.error(status_msg)
@@ -245,7 +238,6 @@ with tab1:
 
 with tab2:
     fig = go.Figure()
-    # วาดคอนกรีตฐานราก
     fig.add_trace(go.Mesh3d(
         x=[ft_x_min, ft_x_max, ft_x_max, ft_x_min, ft_x_min, ft_x_max, ft_x_max, ft_x_min],
         y=[ft_y_min, ft_y_min, ft_y_max, ft_y_max, ft_y_min, ft_y_min, ft_y_max, ft_y_max],
@@ -253,14 +245,12 @@ with tab2:
         i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
         color='rgba(0, 128, 255, 0.6)', name='Footing'
     ))
-    # วาดเสาตอม่อ
     fig.add_trace(go.Mesh3d(
         x=[-cx/2, cx/2, cx/2, -cx/2, -cx/2, cx/2, cx/2, -cx/2],
         y=[-cy/2, -cy/2, cy/2, cy/2, -cy/2, -cy/2, cy/2, cy/2],
         z=[t, t, t, t, t+0.8, t+0.8, t+0.8, t+0.8],
         color='gold', name='Column'
     ))
-    # วาดเสาเข็ม
     if footing_type == "ฐานรากเสาเข็ม (Pile)":
         for px, py in piles:
             fig.add_trace(go.Mesh3d(
@@ -288,4 +278,4 @@ with tab3:
         })
         st.dataframe(df_piles, use_container_width=True)
     else:
-        st.info("เมนูนกสำหรับตรวจสอบเสาเข็มเท่านั้น (โหมดปัจจุบันคือฐานรากแผ่)")
+        st.info("เมนูนี้สำหรับตรวจสอบแรงเสาเข็มรายต้นในโหมดฐานรากเสาเข็มเท่านั้น")
