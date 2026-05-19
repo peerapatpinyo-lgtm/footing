@@ -6,20 +6,27 @@ import matplotlib.patches as patches
 import plotly.graph_objects as go
 
 # --- 1. SET UP PAGE ---
-st.set_page_config(page_title="Enterprise Footing Suite V5.2", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V5.3", page_icon="🏗️", layout="wide")
 
-st.title("🏗️ Enterprise Footing Suite (V5.2 - Production-Grade)")
-st.markdown("ระบบวิเคราะห์ฐานรากขั้นสูง | สัดส่วนพื้นที่เข็มผ่าหน้าตัดวิกฤต | ตรวจสอบแรงถอนปลอดภัย | ป้องกัน Over-reinforced Math Crash")
+st.title("🏗️ Enterprise Footing Suite (V5.3 - Ultimate Structural Edition)")
+st.markdown("ระบบวิเคราะห์ฐานรากชั้นสูง | รองรับสเปกความหนาผนังเสาเข็มกลวง (Spun Pile) | ตรวจสอบ Fractional Shear รอบหน้าตัดวิกฤต")
 st.markdown("---")
 
 # --- 2. SIDEBAR PARAMETERS ---
 with st.sidebar:
     st.header("⚙️ มาตรฐานและข้อกำหนดการออกแบบ")
     
-    st.subheader("1. รูปแบบกลุ่มเสาเข็ม & หน้าตัด")
+    st.subheader("1. รูปแบบกลุ่มเสาเข็ม & รูปทรงเรขาคณิต")
     n_piles = st.selectbox("จำนวนเสาเข็มในฐานราก:", [2, 3, 4, 5, 6, 8, 9], index=4)
-    pile_shape = st.selectbox("รูปทรงหน้าตัดเสาเข็ม:", ["สี่เหลี่ยม (Square Pile)", "กลม (Round/Spun/Bore Pile)"])
-    pile_size = st.number_input("ขนาดหน้าตัดเสาเข็ม (เมตร)", value=0.30, step=0.05)
+    pile_shape = st.selectbox("รูปทรงหน้าตัดเสาเข็ม:", ["สี่เหลี่ยมตัน (Square Pile)", "กลมกลวง/สปัน (Spun Pile)", "กลมตัน/เข็มเจาะ (Solid Round Pile)"])
+    pile_size = st.number_input("ขนาดเส้นผ่านศูนย์กลางภายนอก หรือความกว้างเสาเข็ม (เมตร)", value=0.30, step=0.05)
+    
+    # 🔘 เพิ่มช่องกรอกความหนาผนังเสาเข็มเฉพาะกรณี Spun Pile
+    wall_thickness = 0.0
+    if pile_shape == "กลมกลวง/สปัน (Spun Pile)":
+        wall_thickness_cm = st.slider("ความหนาของผนังเสาเข็ม Spun Pile (ซม.)", min_value=5, max_value=12, value=6, step=1)
+        wall_thickness = wall_thickness_cm / 100
+        
     pile_cap = st.number_input("กำลังรับน้ำหนักปลอดภัยของเข็ม - แรงอัด (ตัน/ต้น)", value=30.0, step=1.0)
     pile_tension_cap = st.number_input("กำลังรับแรงถอนปลอดภัยของเข็ม - แรงดึง (ตัน/ต้น)", value=10.0, step=1.0)
     
@@ -95,7 +102,7 @@ piles_relative = [(p[0] - cg_new_x, p[1] - cg_new_y) for p in piles_actual]
 sum_x2_new = sum(p[0]**2 for p in piles_relative)
 sum_y2_new = sum(p[1]**2 for p in piles_relative)
 
-# --- 6. CORE LOOP WITH FRACTIONAL SHEAR & CAPACITY GUARDS ---
+# --- 6. CORE LOOP WITH FRACTIONAL SHEAR & WALL THICKNESS LOGIC ---
 d = 0.40
 t = 0.55
 has_tension = False
@@ -111,7 +118,7 @@ pile_service_loads = [0.0] * n_piles
 pile_ultimate_loads = [0.0] * n_piles
 previous_max_R = float('inf')
 
-r_pile = pile_size / 2
+r_outer = pile_size / 2
 
 while d < 3.0:
     t = math.ceil((d + 0.15) * 20) / 20
@@ -137,7 +144,6 @@ while d < 3.0:
     min_R = min(pile_service_loads)
     has_tension = min_R < 0
     
-    # 🛑 Guard 1: Weight-Paradox & Tension Capacity Guard
     if (max_R > pile_cap or (has_tension and abs(min_R) > pile_tension_cap)) and max_R >= previous_max_R:
         loop_break_by_guard = True
         break
@@ -181,28 +187,28 @@ while d < 3.0:
     for i, (px, py) in enumerate(piles_actual):
         pu_load = max(0.0, pile_ultimate_loads[i] * 1000)
         
-        # X-Positive Face (Resisted by L_ft width)
-        if px - r_pile >= X_crit_pos: f_xp = 1.0
-        elif px + r_pile <= X_crit_pos: f_xp = 0.0
-        else: f_xp = (px + r_pile - X_crit_pos) / pile_size
+        # X-Positive Face
+        if px - r_outer >= X_crit_pos: f_xp = 1.0
+        elif px + r_outer <= X_crit_pos: f_xp = 0.0
+        else: f_xp = (px + r_outer - X_crit_pos) / pile_size
         V_wb_X_pos += pu_load * f_xp
         
-        # X-Negative Face (Resisted by L_ft width)
-        if px + r_pile <= X_crit_neg: f_xn = 1.0
-        elif px - r_pile >= X_crit_neg: f_xn = 0.0
-        else: f_xn = (X_crit_neg - (px - r_pile)) / pile_size
+        # X-Negative Face
+        if px + r_outer <= X_crit_neg: f_xn = 1.0
+        elif px - r_outer >= X_crit_neg: f_xn = 0.0
+        else: f_xn = (X_crit_neg - (px - r_outer)) / pile_size
         V_wb_X_neg += pu_load * f_xn
         
-        # Y-Positive Face (Resisted by B_ft width)
-        if py - r_pile >= Y_crit_pos: f_yp = 1.0
-        elif py + r_pile <= Y_crit_pos: f_yp = 0.0
-        else: f_yp = (py + r_pile - Y_crit_pos) / pile_size
+        # Y-Positive Face
+        if py - r_outer >= Y_crit_pos: f_yp = 1.0
+        elif py + r_outer <= Y_crit_pos: f_yp = 0.0
+        else: f_yp = (py + r_outer - Y_crit_pos) / pile_size
         V_wb_Y_pos += pu_load * f_yp
         
-        # Y-Negative Face (Resisted by B_ft width)
-        if py + r_pile <= Y_crit_neg: f_yn = 1.0
-        elif py - r_pile >= Y_crit_neg: f_yn = 0.0
-        else: f_yn = (Y_crit_neg - (py - r_pile)) / pile_size
+        # Y-Negative Face
+        if py + r_outer <= Y_crit_neg: f_yn = 1.0
+        elif py - r_outer >= Y_crit_neg: f_yn = 0.0
+        else: f_yn = (Y_crit_neg - (py - r_outer)) / pile_size
         V_wb_Y_neg += pu_load * f_yn
 
     v_wb_X_pos = V_wb_X_pos / (L_ft * 100 * d * 100)
@@ -213,13 +219,12 @@ while d < 3.0:
     v_u_wb_stress = max(v_wb_X_pos, v_wb_X_neg, v_wb_Y_pos, v_wb_Y_neg)
     v_c_wb_allowable = phi_v * 0.53 * math.sqrt(fc_prime)
     
-    # --- 🛑 Guard 2: Mathematical Protection for Steel Over-reinforced Check ---
+    # Check over-reinforced
     M_u_X_pos = sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2 and pile_ultimate_loads[i] > 0)
     Rn_check = (M_u_X_pos * 1000 * 100) / (phi_b * (B_ft * 100) * (d * 100)**2)
     if (2 * Rn_check) / (0.85 * fc_prime) >= 1.0:
-        d += 0.05  # เร่งขยายความหนาหนีโซนพังทลาย
-        if d >= 3.0:
-            over_reinforced_error = True
+        d += 0.05
+        if d >= 3.0: over_reinforced_error = True
         continue
         
     if (v_u_stress <= v_c_allowable) and (v_u_wb_stress <= v_c_wb_allowable) and (max_R <= pile_cap) and (not has_tension or abs(min_R) <= pile_tension_cap):
@@ -228,165 +233,88 @@ while d < 3.0:
 
 d_actual = t - 0.15
 
-# --- 7. ADVANCED REINFORCEMENT & SPACING ENGINE ---
+# --- 7. REINFORCEMENT ENGINE ---
 M_u_X_pos = sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2 and pile_ultimate_loads[i] > 0)
 M_u_X_neg = abs(sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2 and pile_ultimate_loads[i] < 0))
 M_u_Y_pos = sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2 and pile_ultimate_loads[i] > 0)
 M_u_Y_neg = abs(sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2 and pile_ultimate_loads[i] < 0))
 
-def design_steel_flexure_v52(M_u_val, w_cm, d_cm, t_cm):
+def design_steel_flexure_v53(M_u_val, w_cm, d_cm, t_cm):
     if M_u_val <= 0:
         As_req = 0.0018 * w_cm * t_cm
     else:
         M_u_kg_cm = M_u_val * 1000 * 100
         Rn = M_u_kg_cm / (phi_b * w_cm * d_cm**2)
-        if (2 * Rn) / (0.85 * fc_prime) >= 1.0:
-            rho = 0.002
-        else:
-            rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(1 - (2 * Rn) / (0.85 * fc_prime)))
+        rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(1 - (2 * Rn) / (0.85 * fc_prime))) if (2 * Rn) / (0.85 * fc_prime) < 1.0 else 0.002
         rho_min_flex = max(0.83 * math.sqrt(fc_prime) / fy, 14.0 / fy)
         As_req = max(rho * w_cm * d_cm, rho_min_flex * w_cm * d_cm, 0.0018 * w_cm * t_cm)
         
     n_bars = max(math.ceil(As_req / ab), 6)
     sp = math.floor((w_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
-    
-    # 📏 Max Spacing Control Check
     max_allowable_sp = min(3 * t_cm, 45.0)
     while sp > max_allowable_sp:
         n_bars += 1
         sp = math.floor((w_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
-        
-    # 📏 Min Spacing Verification
-    min_allowable_sp = max(1.5 * (bar_dia / 10), 2.5)
-    is_congested = sp < min_allowable_sp
-    
-    return n_bars, sp, is_congested
+    return n_bars, sp, (sp < max(1.5 * (bar_dia / 10), 2.5))
 
-num_X_bot, sp_X_bot, cong_X_bot = design_steel_flexure_v52(M_u_X_pos, B_ft*100, d_actual*100, t*100)
-num_Y_bot, sp_Y_bot, cong_Y_bot = design_steel_flexure_v52(M_u_Y_pos, L_ft*100, d_actual*100, t*100)
-num_X_top, sp_X_top, cong_X_top = design_steel_flexure_v52(M_u_X_neg, B_ft*100, d_actual*100, t*100)
-num_Y_top, sp_Y_top, cong_Y_top = design_steel_flexure_v52(M_u_Y_neg, L_ft*100, d_actual*100, t*100)
+num_X_bot, sp_X_bot, cong_X_bot = design_steel_flexure_v53(M_u_X_pos, B_ft*100, d_actual*100, t*100)
+num_Y_bot, sp_Y_bot, cong_Y_bot = design_steel_flexure_v53(M_u_Y_pos, L_ft*100, d_actual*100, t*100)
+num_X_top, sp_X_top, cong_X_top = design_steel_flexure_v53(M_u_X_neg, B_ft*100, d_actual*100, t*100)
+num_Y_top, sp_Y_top, cong_Y_top = design_steel_flexure_v53(M_u_Y_neg, L_ft*100, d_actual*100, t*100)
 
-any_congested = cong_X_bot or cong_Y_bot or cong_X_top or cong_Y_top
-
-# --- 8. 2D ENGINEERING BLUEPRINT ---
+# --- 8. 2D BLUEPRINT PRINT ---
 st.markdown("### 📊 2. แบบวิศวกรรมและการจัดเหล็กเสริมโครงสร้าง (2D Engineering Blueprint)")
-fig_2d, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(15, 7))
+fig_2d, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(15, 6))
 
-ax_plan.set_title("แปลนการจัดเรียงเสาเข็มและระยะขอบฐานราก (Top View)", fontsize=11, fontweight='bold', pad=10)
 rect_cap = patches.Rectangle((min(p[0] for p in piles_actual)-E_dist, min(p[1] for p in piles_actual)-E_dist), B_ft, L_ft, linewidth=2, edgecolor='#2c3e50', facecolor='#ecf0f1', zorder=1)
 ax_plan.add_patch(rect_cap)
-rect_col = patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.5, edgecolor='#e74c3c', facecolor='#f1948a', zorder=4, label='Column')
-ax_plan.add_patch(rect_col)
-ax_plan.scatter(cg_new_x, cg_new_y, color='#f39c12', marker='X', s=120, zorder=5, label='True C.G. (Shifted)')
+ax_plan.add_patch(patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.5, edgecolor='#e74c3c', facecolor='#f1948a', zorder=4))
 
 for i, (px, py) in enumerate(piles_actual):
     if "กลม" in pile_shape:
-        p_draw = patches.Circle((px, py), pile_size/2, linewidth=1.2, edgecolor='#7f8c8d', facecolor='#bdc3c7', zorder=3)
+        ax_plan.add_patch(patches.Circle((px, py), r_outer, linewidth=1.2, edgecolor='#7f8c8d', facecolor='#bdc3c7', zorder=3))
+        if wall_thickness > 0: # วาดวงแหวนวงในแสดงความหนาผนังเข็มสปัน
+            ax_plan.add_patch(patches.Circle((px, py), r_outer - wall_thickness, linewidth=0.8, edgecolor='#95a5a6', facecolor='#ecf0f1', linestyle=':', zorder=3))
     else:
-        p_draw = patches.Rectangle((px-pile_size/2, py-pile_size/2), pile_size, pile_size, linewidth=1.2, edgecolor='#7f8c8d', facecolor='#bdc3c7', zorder=3)
-    ax_plan.add_patch(p_draw)
+        ax_plan.add_patch(patches.Rectangle((px-r_outer, py-r_outer), pile_size, pile_size, linewidth=1.2, edgecolor='#7f8c8d', facecolor='#bdc3c7', zorder=3))
     ax_plan.text(px, py, f"P{i+1}", ha='center', va='center', color='#2c3e50', fontsize=9, fontweight='bold', zorder=4)
 
 ax_plan.set_xlim(min(p[0] for p in piles_actual)-E_dist-0.3, max(p[0] for p in piles_actual)+E_dist+0.3)
 ax_plan.set_ylim(min(p[1] for p in piles_actual)-E_dist-0.3, max(p[1] for p in piles_actual)+E_dist+0.3)
-ax_plan.grid(True, linestyle=':', alpha=0.5)
 ax_plan.set_aspect('equal')
 
-ax_sec.set_title("รูปตัดโครงสร้างแสดงตะแกรงเหล็ก บน-ล่าง (Cross Section)", fontsize=11, fontweight='bold', pad=10)
-ax_sec.fill_between([-B_ft/2, B_ft/2], -0.15, -0.10, color='#f5cba7', alpha=0.7)
-ax_sec.fill_between([-B_ft/2, B_ft/2], -0.10, 0.0, color='#d5dbdb', alpha=0.9)
+# Cross Section
 ax_sec.add_patch(patches.Rectangle((-B_ft/2, 0), B_ft, t, linewidth=2, edgecolor='#2c3e50', facecolor='#eaeded'))
-ax_sec.add_patch(patches.Rectangle((-cx/2, t), cx, 0.5, linewidth=1.5, edgecolor='#e74c3c', facecolor='#f1948a'))
-
-ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [0.075, 0.075], color='#1f618d', linewidth=2.5, label='Bottom Rebar')
-ax_sec.plot([-B_ft/2+0.075, -B_ft/2+0.075], [0.075, 0.225], color='#1f618d', linewidth=2.5)
-ax_sec.plot([B_ft/2-0.075, B_ft/2-0.075], [0.075, 0.225], color='#1f618d', linewidth=2.5)
-
-ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [t-0.075, t-0.075], color='#27ae60', linewidth=2.0, linestyle='--', label='Top Rebar')
-ax_sec.plot([-B_ft/2+0.075, -B_ft/2+0.075], [t-0.075, t-0.225], color='#27ae60', linewidth=2.0, linestyle='--')
-ax_sec.plot([B_ft/2-0.075, B_ft/2-0.075], [t-0.075, t-0.225], color='#27ae60', linewidth=2.0, linestyle='--')
-
+ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [0.075, 0.075], color='#1f618d', linewidth=2.5)
+ax_sec.plot([-B_ft/2+0.075, B_ft/2-0.075], [t-0.075, t-0.075], color='#27ae60', linewidth=2.0, linestyle='--')
 ax_sec.text(0, t/2, f"Thickness t = {t*100:.0f} cm\nBot: DB{bar_dia} @ {sp_X_bot} cm\nTop: DB{bar_dia} @ {sp_X_top} cm", ha='center', va='center', color='#2c3e50', fontsize=9, fontweight='bold')
 ax_sec.set_xlim(-B_ft/2 - 0.3, B_ft/2 + 0.3)
-ax_sec.set_ylim(-0.2, t + 0.7)
+ax_sec.set_ylim(-0.1, t + 0.5)
 ax_sec.set_aspect('equal')
 ax_sec.axis('off')
-
 st.pyplot(fig_2d)
 
-# --- 9. PRODUCTION ANALYSIS TABS ---
-tab1, tab2, tab3 = st.tabs(["📝 ผลการประเมินสถิตศาสตร์เชิงลึก", "🎮 มิติและรูปร่าง 3D Solid Render", "📋 ตารางสรุปหน่วยแรงและการจัดเรียงตัวเลข"])
-
+# --- 9. OUTPUT DATA TABS ---
+tab1, tab2 = st.tabs(["📝 ผลการประเมินสถิตศาสตร์เชิงลึก", "📋 ตารางสรุปหน่วยแรงและการจัดเรียงตัวเลข"])
 with tab1:
-    if over_reinforced_error:
-        st.error("🚨 [Over-reinforced Error] โมเมนต์ดัดสูงเกินกว่าความสามารถสูงสุดของหน้าตัดคอนกรีตจะรับได้ (พจน์สมการถอดรากติดลบ) กรุณาเพิ่มขนาดยังหน้าตัดตอม่อ หรือเพิ่มกำลังอัดคอนกรีต fc'")
-    elif loop_break_by_guard:
-        st.error("🚨 [Uplift / Self-Weight Paradox Triggered] ไม่สามารถประมวลผลให้ปลอดภัยได้ เนื่องจากเสาเข็มโอเวอร์โหลดทั้งจากน้ำหนักตัวเองหรือแรงถอนที่เกินลิมิต ปรับปรุงโดยเพิ่มจำนวนเข็ม")
-    else:
-        st.success("✅ การประมวลผลผ่านเกณฑ์มาตรฐานด้านกำลังและระยะตรวจสอบเชิงเส้นเรียบร้อย")
+    if over_reinforced_error: st.error("🚨 [Over-reinforced Error] โมเมนต์ดัดสูงเกินขีดจำกัดหน้าตัดคอนกรีต")
+    elif loop_break_by_guard: st.error("🚨 [Paradox Triggered] เสาเข็มโอเวอร์โหลดทั้งจากน้ำหนักตัวเองหรือแรงถอนที่เกินลิมิต")
+    else: st.success("✅ ประมวลผลสำเร็จและปลอดภัยตามเกณฑ์มาตรฐานวิศวกรรม")
 
-    if t >= 0.60:
-        st.warning(f"⚠️ [Skin Reinforcement Note] เนื่องจากความหนาฐานราก t = {t*100:.0f} ซม. ($\ge 60$ ซม.) ตามมาตรฐานวิศวกรรมแนะนำให้พิจารณาเสริมเหล็กผิวข้าง (Side Face Reinforcement) เพื่อควบคุมการแตกร้าวเนื่องจากอุณหภูมิ")
-        
-    if any_congested:
-        st.error("❌ [Spacing Alert] ตรวจพบระยะห่างเหล็กเสริมบางทิศทางต่ำกว่าเกณฑ์ควบคุมหน้างาน ($\le 1.5\phi$ หรือ 2.5 ซม.) เสี่ยงต่อการเกิดโพรงคอนกรีต (Honeycomb) กรุณาปรับเปลี่ยนเพิ่มขนาดหน้าตัดเหล็กเสริมเพื่อถ่างระยะแอด")
+    if wall_thickness > 0:
+        st.info(f"💡 หน้าตัดเสาเข็ม Spun Pile คิดคำนวณพื้นที่สุทธิโดยหักรูเจาะในด้วยผนังหนา: {wall_thickness*100:.1f} ซม.")
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("True C.G. Shift X", f"{cg_new_x*100:+.1f} ซม.")
-    c2.metric("True C.G. Shift Y", f"{cg_new_y*100:+.1f} ซม.")
-    c3.metric("ความหนาฐานรากควบคุม (t)", f"{t*100:.0f} ซม.")
-
-    st.markdown("### 🧾 สรุปผลใบถอดแบบสั่งเหล็กเส้น")
-    st.info(f"🔹 **เหล็กตะแกรงล่าง (ทิศ X):** DB{bar_dia} จำนวน {num_X_bot} เส้น @ {sp_X_bot:.0f} ซม. | **(ทิศ Y):** DB{bar_dia} จำนวน {num_Y_bot} เส้น @ {sp_Y_bot:.0f} ซม.")
-    st.info(f"🔸 **เหล็กตะแกรงบน (ทิศ X):** DB{bar_dia} จำนวน {num_X_top} เส้น @ {sp_X_top:.0f} ซม. | **(ทิศ Y):** DB{bar_dia} จำนวน {num_Y_top} เส้น @ {sp_Y_top:.0f} ซม.")
+    c1.metric("ความหนาฐานรากควบคุม (t)", f"{t*100:.0f} ซม.")
+    c2.metric("แรงอัดสูงสุดในเข็ม (max R)", f"{max_R:.2f} ตัน")
+    c3.metric("แรงถอนสูงสุดในเข็ม (min R)", f"{min_R:.2f} ตัน")
 
 with tab2:
-    x_cap = [min(p[0] for p in piles_actual)-E_dist, max(p[0] for p in piles_actual)+E_dist]
-    y_cap = [min(p[1] for p in piles_actual)-E_dist, max(p[1] for p in piles_actual)+E_dist]
-    v_x = [x_cap[0], x_cap[1], x_cap[1], x_cap[0], x_cap[0], x_cap[1], x_cap[1], x_cap[0]]
-    v_y = [y_cap[0], y_cap[0], y_cap[1], y_cap[1], y_cap[0], y_cap[0], y_cap[1], y_cap[1]]
-    v_z = [0, 0, 0, 0, t, t, t, t]
-    
-    fig_3d = go.Figure(data=[
-        go.Mesh3d(
-            x=v_x, y=v_y, z=v_z,
-            i=[0, 0, 4, 4, 0, 1, 2, 3, 0, 1, 5, 4],
-            j=[1, 2, 5, 6, 4, 5, 6, 7, 3, 2, 6, 7],
-            k=[2, 3, 6, 7, 1, 2, 3, 0, 4, 5, 2, 3],
-            opacity=0.7, color='#2ecc71', name='Solid Base'
-        )
-    ])
-    fig_3d.update_layout(scene=dict(xaxis_title='X (m)', yaxis_title='Y (m)', zaxis_title='Z (m)'))
-    st.plotly_chart(fig_3d, use_container_width=True)
-
-with tab3:
-    st.markdown("### ⚔️ ตารางสรุปหน่วยแรงตามมาตรฐาน (Numerical Format Enabled)")
-    
-    df_shear = pd.DataFrame({
+    st.dataframe(pd.DataFrame({
         "ประเภทการตรวจสอบ": ["Punching Shear (Combined Jc)", "Wide Beam Shear (Fractional Method)"],
         "หน่วยแรงเกิดขึ้นจริง": [v_u_stress, v_u_wb_stress],
         "กำลังที่ยอมให้ตามกฎหมาย": [v_c_allowable, v_c_wb_allowable]
-    })
-    
-    st.dataframe(df_shear, column_config={
+    }), column_config={
         "หน่วยแรงเกิดขึ้นจริง": st.column_config.NumberColumn("หน่วยแรงเกิดขึ้นจริง (v_u)", format="%.2f ksc"),
         "กำลังที่ยอมให้ตามกฎหมาย": st.column_config.NumberColumn("กำลังที่ยอมให้ตามกฎหมาย (phi*vc)", format="%.2f ksc")
-    }, use_container_width=True, hide_index=True)
-    
-    st.markdown("### 📊 ตารางแสดงแรงปฏิกิริยารายต้น (Clean Numbers for Excel Export)")
-    
-    df_piles_report = pd.DataFrame({
-        "เสาเข็ม": [f"ต้นที่ {i+1}" for i in range(n_piles)],
-        "พิกัด X จริง": [p[0] for p in piles_actual],
-        "พิกัด Y จริง": [p[1] for p in piles_actual],
-        "แรงใช้งาน Service Load": pile_service_loads,
-        "แรงประลัย Ultimate Load": pile_ultimate_loads
-    })
-    
-    st.dataframe(df_piles_report, column_config={
-        "พิกัด X จริง": st.column_config.NumberColumn("พิกัด X จริง", format="%.3f ม."),
-        "พิกัด Y จริง": st.column_config.NumberColumn("พิกัด Y จริง", format="%.3f ม."),
-        "แรงใช้งาน Service Load": st.column_config.NumberColumn("แรงใช้งาน Service Load", format="%.2f ตัน"),
-        "แรงประลัย Ultimate Load": st.column_config.NumberColumn("แรงประลัย Ultimate Load", format="%.2f ตัน")
     }, use_container_width=True, hide_index=True)
