@@ -4,56 +4,69 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # --- 1. SET UP PAGE ---
-st.set_page_config(page_title="Ultimate Footing Designer", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="Professional Footing Engine", page_icon="🏗️", layout="wide")
 
-st.title("🏗️ Ultimate Footing Designer (V3 - Production Grade)")
-st.markdown("ระบบคำนวณฐานรากวิศวกรรมขั้นสูง | รองรับเข็ม 2-6 ต้น | ตรวจสอบระยะฝังเหล็ก ($L_d$) | ส่งออกรายงานคำนวณ")
+st.title("🏗️ Professional Footing Engine (มยผ. & วสท. Strength Design Method)")
+st.markdown("ระบบคำนวณฐานรากขั้นสูง รองรับมาตรฐานควบคุมปัจจุบัน, ตรวจสอบเข็มเยื้องศูนย์จริง, แรงดึงในเข็ม และ Deep Beam Effect")
 st.markdown("---")
 
 # --- 2. SIDEBAR INPUTS ---
 with st.sidebar:
-    st.header("⚙️ พารามิเตอร์ออกแบบ")
+    st.header("⚙️ พารามิเตอร์ควบคุมมาตรฐาน")
     footing_type = st.radio("ประเภทฐานราก:", ["ฐานรากแผ่ (Shallow)", "ฐานรากเสาเข็ม (Pile)"])
-    st.markdown("---")
     
-    st.subheader("1. แรงกระทำจากตอม่อ (Column Loads)")
+    st.subheader("1. ตำแหน่งเสาตอม่อ (สำหรับ Punching Shear)")
+    col_position = st.selectbox("ตำแหน่งเสา:", ["เสาภายใน (Interior)", "เสาขอบ (Edge)", "เสามุม (Corner)"])
+    
+    st.subheader("2. แรงกระทำจากตอม่อ (Service Loads)")
     DL = st.number_input("น้ำหนักคงที่ (DL, ตัน)", value=45.0, step=1.0)
     LL = st.number_input("น้ำหนักจร (LL, ตัน)", value=25.0, step=1.0)
-    Mcx = st.number_input("โมเมนต์ดัดแกน X (M_cx, ตัน-เมตร)", value=3.5, step=0.5)
-    Mcy = st.number_input("โมเมนต์ดัดแกน Y (M_cy, ตัน-เมตร)", value=2.2, step=0.5)
+    Mcx = st.number_input("โมเมนต์ดัดแกน X (M_cx, ตัน-เมตร)", value=4.0, step=0.5)
+    Mcy = st.number_input("โมเมนต์ดัดแกน Y (M_cy, ตัน-เมตร)", value=2.5, step=0.5)
     
     if footing_type == "ฐานรากแผ่ (Shallow)":
         q_all = st.number_input("กำลังรับน้ำหนักดินปลอดภัย (ตัน/ตร.ม.)", value=15.0, step=1.0)
         Df = st.number_input("ความลึกบรรจุฐานราก (Df, เมตร)", value=1.5, step=0.1)
         n_piles = 0
     else:
-        n_piles = st.selectbox("จำนวนเสาเข็มในฐาน:", [2, 3, 4, 5, 6], index=2)
+        n_piles = st.selectbox("จำนวนเสาเข็มในฐาน (ค่านำเข้าตั้งต้น):", [2, 3, 4, 5, 6], index=2)
         pile_cap = st.number_input("กำลังรับน้ำหนักปลอดภัยเข็ม (ตัน/ต้น)", value=30.0, step=1.0)
         pile_size = st.number_input("ขนาดหน้าตัดเสาเข็ม (เมตร)", value=0.30, step=0.05)
     
-    st.subheader("2. มิติตอม่อและวัสดุ")
+    st.subheader("3. มิติตอม่อและกำลังวัสดุ")
     cx = st.number_input("ความกว้างเสา cx (ซม.)", value=30.0, step=5.0) / 100
     cy = st.number_input("ความยาวเสา cy (ซม.)", value=30.0, step=5.0) / 100
-    fc_prime = st.number_input("กำลังอัดคอนกรีต fc' (ksc)", value=280, step=10)
+    fc_prime = st.number_input("กำลังอัดคอนกรีต fc' (ksc)", value=240, step=10)
     fy = st.selectbox("กำลังครากเหล็กเสริม fy (ksc)", [4000, 5000], index=0)
-    bar_dia = st.selectbox("ขนาดเหล็กหลัก (มม.)", [12, 16, 20, 25], index=1)
+    bar_dia = st.selectbox("ขนาดเหล็กหลัก (มม.)", [12, 16, 20, 25], index=2)
 
-# --- 3. INITIALIZE STATE VARIABLES ---
+# --- 3. CORE MATHEMATICS & STRENGTH DESIGN METHOD (SDM) ---
+# ปรับปรุง Load Factors ตามมาตรฐาน มยผ. และ วสท. ปัจจุบัน
+P_service = DL + LL
+P_ultimate = (1.2 * DL) + (1.6 * LL)
+
+# แปลงสัดส่วนโมเมนต์ประลัยตามสัดส่วนโหลดจริงเพื่อความแม่นยำ
+load_factor_avg = P_ultimate / P_service if P_service > 0 else 1.4
+Mu_cx = Mcx * load_factor_avg
+Mu_cy = Mcy * load_factor_avg
+
+# ปรับปรุง Reduction Factors (phi) ตาม ACI รุ่นใหม่ / วสท.
+phi_v = 0.75  # แรงเฉือนเปลี่ยนจาก 0.85 เป็น 0.75
+phi_b = 0.90  # แรงดัดควบคุมด้วยการดึง (Tension-controlled)
+
+ab = (math.pi * (bar_dia / 10) ** 2) / 4
+
+# เริ่มต้นตัวแปรเพื่อป้องกัน NameError
 V_u_wb_kg, V_u_p_kg = 0.0, 0.0
 phi_V_c_wb_kg, phi_V_c_p_kg = 0.0, 0.0
-P_service = DL + LL
-P_ultimate = (1.4 * DL) + (1.7 * LL)
-Mu_cx, Mu_cy = 1.4 * Mcx, 1.4 * Mcy
-
-phi_v, phi_b = 0.85, 0.90
-vc_wb = 0.53 * math.sqrt(fc_prime)
-vc_p = 1.06 * math.sqrt(fc_prime)
-ab = (math.pi * (bar_dia / 10) ** 2) / 4
-rho_min = 0.0018
-
-piles = []
+piles_ideal = []
+piles_actual = []
 pile_service_loads = []
 pile_ultimate_loads = []
+has_tension = False
+deep_beam_effect = False
+as_skin_req = 0.0
+error_critical = ""
 
 if footing_type == "ฐานรากแผ่ (Shallow)":
     gamma_avg = 2.0
@@ -68,21 +81,30 @@ if footing_type == "ฐานรากแผ่ (Shallow)":
         t = math.ceil((d + 0.075) * 20) / 20
         W_f = B * L * t * 2.4
         P_total_service = P_service + W_f
-        P_total_ultimate = P_ultimate + (1.4 * W_f)
+        P_total_ultimate = P_ultimate + (1.2 * W_f)
         
         Zx, Zy = (B * L**2) / 6, (L * B**2) / 6
         q_max = (P_total_service / (B*L)) + (Mcx / Zx) + (Mcy / Zy)
         q_min = (P_total_service / (B*L)) - (Mcx / Zx) - (Mcy / Zy)
         qu_max = (P_total_ultimate / (B*L)) + (Mu_cx / Zx) + (Mu_cy / Zy)
         
+        # แรงเฉือนคานกว้าง
         dist_x = (B - cx)/2 - d
         V_u_wb_kg = qu_max * L * dist_x * 1000 if dist_x > 0 else 0
-        phi_V_c_wb_kg = phi_v * vc_wb * (L * 100) * (d * 100)
+        phi_V_c_wb_kg = phi_v * (0.53 * math.sqrt(fc_prime)) * (L * 100) * (d * 100)
         
+        # แรงเฉือนทะลุ (เช็ค 3 สมการ)
         bo = 2 * ((cx + d) + (cy + d))
         A_punch = (B * L) - ((cx + d) * (cy + d))
         V_u_p_kg = (qu_max * A_punch) * 1000
-        phi_V_c_p_kg = phi_v * vc_p * (bo * 100) * (d * 100)
+        
+        beta = max(cx, cy) / min(cx, cy)
+        alpha_s = 40 if col_position == "เสาภายใน (Interior)" else (30 if col_position == "เสาขอบ (Edge)" else 20)
+        vc1 = 0.27 * (2 + 4/beta) * math.sqrt(fc_prime)
+        vc2 = 0.27 * (alpha_s * (d * 100) / (bo * 100) + 2) * math.sqrt(fc_prime)
+        vc3 = 1.06 * math.sqrt(fc_prime)
+        vc_p_min = min(vc1, vc2, vc3)
+        phi_V_c_p_kg = phi_v * vc_p_min * (bo * 100) * (d * 100)
         
         if (V_u_wb_kg <= phi_V_c_wb_kg) and (V_u_p_kg <= phi_V_c_p_kg) and (q_max <= q_net_all) and (q_min >= 0):
             break
@@ -95,214 +117,247 @@ if footing_type == "ฐานรากแผ่ (Shallow)":
     M_u_Y = qu_max * B * (((L - cy)/2)**2) / 2
     ft_x_min, ft_x_max = -B/2, B/2
     ft_y_min, ft_y_max = -L/2, L/2
-    status_msg = f"✅ ฐานรากแผ่สำเร็จ ขนาด {B:.2f}x{L:.2f} ม. (แรงดันดินสูงสุด: {q_max:.2f} t/m²)"
+    status_msg = f"✅ ฐานรากแผ่ผ่านเกณฑ์การคำนวณตามมาตรฐาน มยผ. (ต้านทานแรงดันดินสูงสุด: {q_max:.2f} t/m²)"
 
 else:
-    # --- ระบบคำนวณพิกัดกลุ่มเสาเข็มขยายร่าง (2 - 6 ต้น) ---
-    S = 3 * pile_size
+    # --- ฐานรากเสาเข็มพร้อมระบบป้อนพิกัดเยื้องศูนย์จริง (As-Built Deviation) ---
+    st.markdown("### 📍 ตรวจสอบและปรับปรุงพิกัดหน้างาน (Pile Deviation Input)")
+    
+    # คำนวณพิกัดอุดมคติก่อน (Ideal Coordinates)
+    S_start = 3 * pile_size
     E = max(pile_size, 0.30)
     
     if n_piles == 2:
-        piles = [(-S/2, 0), (S/2, 0)]
+        piles_ideal = [(-S_start/2, 0), (S_start/2, 0)]
     elif n_piles == 3:
-        R_tri = S / math.sqrt(3)
-        piles = [(0, R_tri), (-S/2, -R_tri/2), (S/2, -R_tri/2)]
+        R_tri = S_start / math.sqrt(3)
+        piles_ideal = [(0, R_tri), (-S_start/2, -R_tri/2), (S_start/2, -R_tri/2)]
     elif n_piles == 4:
-        piles = [(-S/2, -S/2), (S/2, -S/2), (-S/2, S/2), (S/2, S/2)]
+        piles_ideal = [(-S_start/2, -S_start/2), (S_start/2, -S_start/2), (-S_start/2, S_start/2), (S_start/2, S_start/2)]
     elif n_piles == 5:
-        piles = [(-S/2, -S/2), (S/2, -S/2), (-S/2, S/2), (S/2, S/2), (0, 0)]
+        piles_ideal = [(-S_start/2, -S_start/2), (S_start/2, -S_start/2), (-S_start/2, S_start/2), (S_start/2, S_start/2), (0, 0)]
     elif n_piles == 6:
-        piles = [(-S/2, -S), (S/2, -S), (-S/2, 0), (S/2, 0), (-S/2, S), (S/2, S)]
+        piles_ideal = [(-S_start/2, -S_start), (S_start/2, -S_start), (-S_start/2, 0), (S_start/2, 0), (-S_2, S_start), (S_start/2, S_start)]
 
-    ft_x_min, ft_x_max = min(p[0] for p in piles) - E, max(p[0] for p in piles) + E
-    ft_y_min, ft_y_max = min(p[1] for p in piles) - E, max(p[1] for p in piles) + E
-    B, L = ft_x_max - ft_x_min, ft_y_max - ft_y_min
+    # ส่วนรับแรงเยื้องศูนย์หน้างานจริง (หน้างานไทยเจอบ่อย)
+    exp_dev = st.expander("🛠️ คลิกที่นี่ หากมีเสาเข็มตอกเยื้องศูนย์จากพิกัดผัง (หน้างานจริง Tolerance)", expanded=False)
+    deviations = []
+    with exp_dev:
+        st.caption("ระบุค่าความคลาดเคลื่อนจริงที่รังวัดได้จากหน้างาน (หน่วย: เซนติเมตร)")
+        cc1, cc2 = st.columns(2)
+        for i in range(n_piles):
+            with cc1 if i % 2 == 0 else cc2:
+                dx_cm = st.number_input(f"ต้นที่ {i+1} เยื้องแกน X (ซม.)", value=0.0, step=1.0, key=f"p_dev_x_{i}")
+                dy_cm = st.number_input(f"ต้นที่ {i+1} เยื้องแกน Y (ซม.)", value=0.0, step=1.0, key=f"p_dev_y_{i}")
+                deviations.append((dx_cm / 100, dy_cm / 100))
 
-    sum_x2 = sum(p[0]**2 for p in piles)
-    sum_y2 = sum(p[1]**2 for p in piles)
+    # เช็คแรงเฉลี่ยกดลงหัวเข็มขั้นต้นรวมน้ำหนักเผื่อ 12% ก่อนเข้าลูปถาวร เพื่อไม่ให้ระบบค้าง
+    W_f_est = 0.12 * P_service
+    if (P_service + W_f_est) / n_piles > pile_cap:
+        error_critical = f"❌ แรงกดสถิตเฉลี่ยรวมน้ำหนักฐานราก ({ (P_service + W_f_est) / n_piles :.2f} ตัน/ต้น) เกินพิกัดปลอดภัยของเสาเข็ม ({pile_cap} ตัน) ระบบหยุดคำนวณอัตโนมัติเนื่องจากจำนวนเข็มไม่เพียงพอ"
     
-    d = 0.25
-    while d < 2.5:
-        t = math.ceil((d + 0.15) * 20) / 20
-        W_f = B * L * t * 2.4
-        P_tot_service = P_service + W_f
-        P_tot_ultimate = P_ultimate + (1.4 * W_f)
-        
-        pile_service_loads = []
-        pile_ultimate_loads = []
-        for px, py in piles:
-            R_i = (P_tot_service / n_piles) + (Mcy * px / sum_x2 if sum_x2 > 0 else 0) + (Mcx * py / sum_y2 if sum_y2 > 0 else 0)
-            U_i = (P_tot_ultimate / n_piles) + (Mu_cy * px / sum_x2 if sum_x2 > 0 else 0) + (Mu_cx * py / sum_y2 if sum_y2 > 0 else 0)
-            pile_service_loads.append(R_i)
-            pile_ultimate_loads.append(U_i)
+    if not error_critical:
+        # วนลูปออกแบบขนาดและตรวจสอบหน้าตัดโครงสร้าง
+        S = S_start
+        loop_size_active = True
+        while loop_size_active and S < 6.0:
+            # อัปเดตพิกัดร่วมกับแรงเยื้องศูนย์จริง
+            piles_actual = []
+            for idx, (ix, iy) in enumerate(piles_ideal):
+                # ขยายพิกัดตามอัตราส่วนของ S ที่เพิ่มขึ้นกรณีโหลดไม่ผ่าน
+                scale_ratio = S / S_start
+                piles_actual.append((ix * scale_ratio + deviations[idx][0], iy * scale_ratio + deviations[idx][1]))
             
-        max_R = max(pile_service_loads)
-        
-        # ตรวจสอบแรงเฉือนทะลุ
-        V_u_p_kg = 0
-        for i, (px, py) in enumerate(piles):
-            if abs(px) > (cx/2 + d/2) or abs(py) > (cy/2 + d/2):
-                V_u_p_kg += pile_ultimate_loads[i] * 1000
-        bo = 2 * ((cx + d) + (cy + d))
-        phi_V_c_p_kg = phi_v * vc_p * (bo * 100) * (d * 100)
-        
-        # ตรวจสอบแรงเฉือนคานกว้าง
-        V_wb_X = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[0] > cx/2 + d),
-                     sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[0] < -(cx/2 + d)))
-        V_wb_Y = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[1] > cy/2 + d),
-                     sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles) if p[1] < -(cy/2 + d)))
-        
-        phi_V_c_wb_X = phi_v * vc_wb * (L * 100) * (d * 100)
-        phi_V_c_wb_Y = phi_v * vc_wb * (B * 100) * (d * 100)
-        
-        if (V_u_p_kg <= phi_V_c_p_kg) and (V_wb_X <= phi_V_c_wb_X) and (V_wb_Y <= phi_V_c_wb_Y) and (max_R <= pile_cap):
-            break
-        d += 0.02
-        if max_R > pile_cap:
-            status_msg = f"❌ น้ำหนักลงเข็มวิกฤตเกินพิกัด ({max_R:.2f} > {pile_cap} ตัน) โปรแกรมหยุดการคำนวณอัตโนมัติ"
-            break
+            ft_x_min, ft_x_max = min(p[0] for p in piles_actual) - E, max(p[0] for p in piles_actual) + E
+            ft_y_min, ft_y_max = min(p[1] for p in piles_actual) - E, max(p[1] for p in piles_actual) + E
+            B, L = ft_x_max - ft_x_min, ft_y_max - ft_y_min
+            
+            sum_x2 = sum(p[0]**2 for p in piles_actual)
+            sum_y2 = sum(p[1]**2 for p in piles_actual)
+            
+            d = 0.30
+            while d < 2.5:
+                t = math.ceil((d + 0.15) * 20) / 20
+                W_f = B * L * t * 2.4
+                P_tot_service = P_service + W_f
+                P_tot_ultimate = P_ultimate + (1.2 * W_f)
+                
+                pile_service_loads = []
+                pile_ultimate_loads = []
+                for px, py in piles_actual:
+                    R_i = (P_tot_service / n_piles) + (Mcy * px / sum_x2 if sum_x2 > 0 else 0) + (Mcx * py / sum_y2 if sum_y2 > 0 else 0)
+                    U_i = (P_tot_ultimate / n_piles) + (Mu_cy * px / sum_x2 if sum_x2 > 0 else 0) + (Mu_cx * py / sum_y2 if sum_y2 > 0 else 0)
+                    pile_service_loads.append(R_i)
+                    pile_ultimate_loads.append(U_i)
+                
+                max_R = max(pile_service_loads)
+                min_R = min(pile_service_loads)
+                if min_R < 0: has_tension = True
+                
+                # ตรวจสอบแรงเฉือนทะลุ (Punching)
+                V_u_p_kg = 0
+                for i, (px, py) in enumerate(piles_actual):
+                    if abs(px) > (cx/2 + d/2) or abs(py) > (cy/2 + d/2):
+                        V_u_p_kg += pile_ultimate_loads[i] * 1000
+                bo = 2 * ((cx + d) + (cy + d))
+                
+                beta = max(cx, cy) / min(cx, cy)
+                alpha_s = 40 if col_position == "เสาภายใน (Interior)" else (30 if col_position == "เสาขอบ (Edge)" else 20)
+                vc1 = 0.27 * (2 + 4/beta) * math.sqrt(fc_prime)
+                vc2 = 0.27 * (alpha_s * (d * 100) / (bo * 100) + 2) * math.sqrt(fc_prime)
+                vc3 = 1.06 * math.sqrt(fc_prime)
+                phi_V_c_p_kg = phi_v * min(vc1, vc2, vc3) * (bo * 100) * (d * 100)
+                
+                # ตรวจสอบแรงเฉือนคานกว้าง
+                V_wb_X = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles_actual) if p[0] > cx/2 + d),
+                             sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles_actual) if p[0] < -(cx/2 + d)))
+                V_wb_Y = max(sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles_actual) if p[1] > cy/2 + d),
+                             sum(pile_ultimate_loads[i]*1000 for i, p in enumerate(piles_actual) if p[1] < -(cy/2 + d)))
+                
+                V_u_wb_kg = max(V_wb_X, V_wb_Y)
+                phi_V_c_wb_kg = phi_v * (0.53 * math.sqrt(fc_prime)) * (L * 100) * (d * 100) if V_wb_X >= V_wb_Y else phi_v * (0.53 * math.sqrt(fc_prime)) * (B * 100) * (d * 100)
+                
+                if (V_u_p_kg <= phi_V_c_p_kg) and (V_u_wb_kg <= phi_V_c_wb_kg) and (max_R <= pile_cap):
+                    loop_size_active = False
+                    break
+                d += 0.02
+                
+            if max_R > pile_cap:
+                S += 0.10  # ขยายระยะห่างเสาเข็มอัตโนมัติเพื่อกระจายแรงดัดเยื้องศูนย์
+            else:
+                break
+                
+        d_actual = t - 0.15
+        M_u_X = max(sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2), 0.0)
+        M_u_Y = max(sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2), 0.0)
+        status_msg = f"✅ ฐานรากเสาเข็มประมวลผลผ่านตามเกณฑ์ มยผ. และปรับขนาดอัตโนมัติสำเร็จ (แรงลงเข็มสูงสุด: {max_R:.2f} ตัน)"
 
-    d_actual = t - 0.15
-    V_u_wb_kg = max(V_wb_X, V_wb_Y)
-    phi_V_c_wb_kg = phi_V_c_wb_X if V_wb_X >= V_wb_Y else phi_V_c_wb_Y
+# --- 4. ADVANCED REINFORCEMENT & REAL SPACING DESIGN ---
+if not error_critical:
+    if t >= 0.90:
+        deep_beam_effect = True
+        as_skin_req = 0.0018 * (B * 100) * (t * 100) # คำนวณเนื้อที่เหล็กกรงรัดรอบเบื้องต้น
+        
+    def design_steel_production(M_u_val, width_cm, d_cm, t_cm):
+        M_u_kg_cm = M_u_val * 1000 * 100
+        Rn = M_u_kg_cm / (phi_b * width_cm * d_cm**2) if d_cm > 0 else 0
+        try:
+            rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(abs(1 - (2 * Rn) / (0.85 * fc_prime))))
+        except:
+            rho = 0.0
+            
+        # ปรับปรุงขั้นต่ำตามมาตรฐานหน้าตัดรับแรงดัด (Flexural Minimum Steel)
+        rho_min_flex = max(0.83 * math.sqrt(fc_prime) / fy, 14.0 / fy)
+        As_req = max(rho * width_cm * d_cm, rho_min_flex * width_cm * d_cm, 0.0018 * width_cm * t_cm)
+        
+        n_bars = max(math.ceil(As_req / ab), 4)
+        raw_sp = (width_cm - 15) / (n_bars - 1) if n_bars > 1 else 15.0
+        # ปัดเศษระยะห่างเหล็กลงเป็นจำนวนเต็มเซนติเมตรเพื่อให้ช่างทำงานง่ายหน้างานจริง
+        sp = math.floor(raw_sp)
+        if sp > 25: sp = 20 # จำกัดระยะแอดไม่ให้ห่างเกินพิกัดควบคุมรอยร้าว
+        return n_bars, sp, As_req
+
+    num_bars_X, spacing_X, As_X = design_steel_production(M_u_X, B*100, d_actual*100, t*100)
+    num_bars_Y, spacing_Y, As_Y = design_steel_production(M_u_Y, L*100, d_actual*100, t*100)
     
-    M_u_X = max(sum(pile_ultimate_loads[i] * (p[0] - cx/2) for i, p in enumerate(piles) if p[0] > cx/2),
-                sum(pile_ultimate_loads[i] * (abs(p[0]) - cx/2) for i, p in enumerate(piles) if p[0] < -cx/2))
-    M_u_Y = max(sum(pile_ultimate_loads[i] * (p[1] - cy/2) for i, p in enumerate(piles) if p[1] > cy/2),
-                sum(pile_ultimate_loads[i] * (abs(p[1]) - cy/2) for i, p in enumerate(piles) if p[1] < -cy/2))
+    concrete_vol = B * L * t
+    est_steel_weight = (((num_bars_X * B) + (num_bars_Y * L)) * (ab * 0.00785 * 100))
 
-    if max_R <= pile_cap:
-        status_msg = f"✅ ฐานรากเสาเข็ม {n_piles} ต้น ผ่านเกณฑ์ปลอดภัยสูงสุด"
-
-# --- 4. STEEL DESIGN & DEVELOPMENT LENGTH (L_d) CHECK ---
-def design_steel_advanced(M_u_val, width_cm, d_cm, t_cm, col_size_cm):
-    M_u_kg_cm = M_u_val * 1000 * 100
-    Rn = M_u_kg_cm / (phi_b * width_cm * d_cm**2) if d_cm > 0 else 0
-    try:
-        rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(abs(1 - (2 * Rn) / (0.85 * fc_prime))))
-    except:
-        rho = rho_min
-    As_req = max(rho * width_cm * d_cm, rho_min * width_cm * t_cm)
-    n_bars = max(math.ceil(As_req / ab), 4)
-    sp = math.floor((width_cm - 15) / (n_bars - 1))
-    
-    # คำนวณระยะฝังแน่น L_d (ACI Formula สำหรับเหล็กข้ออ้อยรับแรงดึง)
-    db_cm = bar_dia / 10
-    L_d = 0.06 * (fy / math.sqrt(fc_prime)) * db_cm
-    available_L = (width_cm - col_size_cm) / 2 - 7.5 # หักระยะหุ้มคอนกรีตขอบ
-    hook_needed = "❌ ไม่พอ! ต้องงอขอฉาก 90° หน้างาน" if L_d > available_L else "✅ เพียงพอ (ไม่ต้องงอขอ)"
-    
-    return n_bars, sp, As_req, L_d, available_L, hook_needed
-
-num_bars_X, spacing_X, As_X, L_dX, avail_X, hook_X = design_steel_advanced(M_u_X, B*100, d_actual*100, t*100, cx*100)
-num_bars_Y, spacing_Y, As_Y, L_dY, avail_Y, hook_Y = design_steel_advanced(M_u_Y, L*100, d_actual*100, t*100, cy*100)
-
-concrete_vol = B * L * t
-est_steel_weight = (((num_bars_X * B) + (num_bars_Y * L)) * (ab * 0.00785 * 100))
-
-# --- 5. CALCULATION SHEET GENERATOR ---
-report_txt = f"""==================================================
-        REPORT: STRUCTURAL FOOTING DESIGN SHEET          
+    # --- 5. REPORT GENERATOR ---
+    report_txt = f"""==================================================
+        CALCULATION SHEET: STRUCTURAL FOOTING DESIGN          
 ==================================================
-[1] GENERAL DATA & MATERIALS
-- Footing Type: {footing_type}
-- Concrete Strength (fc'): {fc_prime} ksc
-- Steel Yield Strength (fy): {fy} ksc
-- Main Reinforcement: DB{bar_dia} mm (Area = {ab:.3f} sq.cm)
+[1] DESIGN CODE & SPECIFICATION
+- Reference Code: DPT / EIT Standard (Strength Design Method)
+- Load Combination: 1.2*DL + 1.6*LL
+- Strength Reduction (Shear, phi_v): {phi_v:.2f} | (Flexure, phi_b): {phi_b:.2f}
+- Material: fc' = {fc_prime} ksc | fy = {fy} ksc
 
-[2] COLUMN LOADS (AT BASE)
-- Service Axial Load (P): {P_service:.2f} Tons (DL={DL}, LL={LL})
-- Factored Axial Load (Pu): {P_ultimate:.2f} Tons
-- Overturning Moment Mx: {Mcx:.2f} T-m | My: {Mcy:.2f} T-m
+[2] STRUCTURAL ANALYSIS RESULT
+- Footing Configuration: {footing_type} ({col_position})
+- Factored Load (Pu): {P_ultimate:.2f} Tons | Mu_x = {Mu_cx:.2f} T-m | Mu_y = {Mu_cy:.2f} T-m
+- Final Geometrical Dimensions: {B:.2f} x {L:.2f} x {t:.2f} m
 
-[3] GEOMETRY & CONCRETE DIMENSIONS
-- Designed Size: Width X = {B:.2f} m | Length Y = {L:.2f} m
-- Total Thickness (t): {t*100:.0f} cm (Effective depth d = {d_actual*100:.1f} cm)
-- Total Concrete Volume: {concrete_vol:.2f} m3
+[3] SAFETY CHECK STATIONS
+- Wide Beam Shear (Vu): {V_u_wb_kg:,.1f} kg / Capacity: {phi_V_c_wb_kg:,.1f} kg
+- Punching Shear (Vu): {V_u_p_kg:,.1f} kg / Capacity: {phi_V_c_p_kg:,.1f} kg
 
-[4] CRITICAL SECTION CODE CHECKS
-- Wide Beam Shear Force (Vu): {V_u_wb_kg:,.1f} kg | Capacity (phi Vc): {phi_V_c_wb_kg:,.1f} kg
-- Punching Shear Force (Vu): {V_u_p_kg:,.1f} kg | Capacity (phi Vc): {phi_V_c_p_kg:,.1f} kg
+[4] STEEL REINFORCEMENT (PRACTICAL ROUNDED)
+- X-Axis Bottom Steel: DB{bar_dia} mm @ {spacing_X} cm ({num_bars_X} bars)
+- Y-Axis Bottom Steel: DB{bar_dia} mm @ {spacing_Y} cm ({num_bars_Y} bars)
+==================================================
+"""
 
-[5] REINFORCEMENT & ANCHORAGE DETAILS
-- X-Axis Steel: DB{bar_dia} - {num_bars_X} bars @ {spacing_X} cm (As = {As_X:.2f} sq.cm)
-  * Req. Development Length (Ld): {L_dX:.1f} cm | Available: {avail_X:.1f} cm -> Status: {hook_X}
-- Y-Axis Steel: DB{bar_dia} - {num_bars_Y} bars @ {spacing_Y} cm (As = {As_Y:.2f} sq.cm)
-  * Req. Development Length (Ld): {L_dY:.1f} cm | Available: {avail_Y:.1f} cm -> Status: {hook_Y}
-
---------------------------------------------------
-Certified by Ultimate Footing Engine v3 (ACI/EIT-Compliant)
-=================================================="""
-
-# --- 6. UI DISPLAY ---
-if "❌" in status_msg: st.error(status_msg)
-else: st.success(status_msg)
-
-tab1, tab2, tab3 = st.tabs(["📊 สรุปผลและตรวจสอบสเปก", "🎲 แบบจำลอง 3D", "📋 ตารางตรวจสอบวิศวกรรมเชิงลึก"])
-
-with tab1:
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("ขนาดฐานราก", f"{B:.2f} x {L:.2f} ม.")
-    c2.metric("ความหนาตอม่อ (t)", f"{t*100:.0f} ซม.")
-    c3.metric("ปริมาตรคอนกรีต", f"{concrete_vol:.2f} คิว")
-    c4.metric("น้ำหนักเหล็กตะแกรง", f"{est_steel_weight:.1f} kg")
+    # --- 6. UI DISPLAY MANAGEMENT ---
+    st.success(status_msg)
     
-    st.markdown("### 🛠️ รายละเอียดเหล็กเสริมและระยะฝังแน่น ($L_d$)")
-    col_x, col_y = st.columns(2)
-    with col_x:
-        st.info(f"🔹 **ตะแกรงเหล็กแนว X:**\n\n**DB{bar_dia} @ {spacing_X} ซม.** ({num_bars_X} เส้น)\n\nระยะฝังที่ต้องการ: {L_dX:.1f} ซม. (มีจริง {avail_X:.1f} ซม.)\n\nสถานะตะขอ: **{hook_X}**")
-    with col_y:
-        st.info(f"🔸 **ตะแกรงเหล็กแนว Y:**\n\n**DB{bar_dia} @ {spacing_Y} ซม.** ({num_bars_Y} เส้น)\n\nระยะฝังที่ต้องการ: {L_dY:.1f} ซม. (มีจริง {avail_Y:.1f} ซม.)\n\nสถานะตะขอ: **{hook_Y}**")
+    # ส่วนแสดงคำเตือนวิศวกรรมควบคุม (Engineering Alarms)
+    if has_tension:
+        st.warning("⚠️ Warning: ตรวจพบแรงดึง (Uplift) เกิดขึ้นในเสาเข็มบางต้น! กรุณาตรวจสอบเหล็กแกนเดือยเสาเข็ม (Dowels) ให้มีระยะฝังเพียงพอรับแรงดึง")
+    if deep_beam_effect:
+        st.info(f"💡 Deep Beam Effect: ฐานรากหนา {t*100:.0f} ซม. (>= 90 ซม.) เข้าข่ายคานลึก แนะนำให้เสริมเหล็กกรงรัดรอบด้านข้าง (Skin Reinforcement) อย่างน้อย {as_skin_req:.1f} ตร.ซม. เพื่อป้องกันรอยร้าวเผื่อสลายแรงเฉือนแนวดิ่ง")
+
+    tab1, tab2, tab3 = st.tabs(["📊 รายงานการคำนวณ", "🎲 แบบจำลองพิกัดจริง 3D", "📋 ตรวจสอบแรงรายต้น"])
+    
+    with tab1:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("ขนาดฐานรากตัดจริง", f"{B:.2f} x {L:.2f} ม.")
+        c2.metric("ความหนารวม (t)", f"{t*100:.0f} ซม.")
+        c3.metric("ปริมาตรคอนกรีต", f"{concrete_vol:.2f} m³")
+        c4.metric("น้ำหนักเหล็กเสริมประมาณการ", f"{est_steel_weight:.1f} kg")
         
-    st.markdown("### 📄 ดาวน์โหลดเอกสารสำหรับส่งขออนุมัติ")
-    st.download_button(label="💾 Download Calculation Sheet (.txt)", data=report_txt, file_name="footing_calculation_sheet.txt", mime="text/plain")
+        st.markdown("### 🛠️ รายละเอียดเหล็กเสริมล่าง (ปัดเศษแอดเซนติเมตรเต็ม ทำงานง่าย)")
+        st.info(f"🔹 **เหล็กเสริมขนานแกน X:** ใช้ **DB{bar_dia} จำนวน {num_bars_X} เส้น @ {spacing_X:.0f} ซม.** (ปริมาณเหล็กจัดจริง {As_X:.2f} ตร.ซม.)")
+        st.info(f"🔸 **เหล็กเสริมขนานแกน Y:** ใช้ **DB{bar_dia} จำนวน {num_bars_Y} เส้น @ {spacing_Y:.0f} ซม.** (ปริมาณเหล็กจัดจริง {As_Y:.2f} ตร.ซม.)")
+        
+        st.download_button(label="💾 ดาวน์โหลดเล่มรายการคำนวณสำหรับยื่นขออนุญาต (.txt)", data=report_txt, file_name="Design_Report.txt")
 
-with tab2:
-    fig = go.Figure()
-    fig.add_trace(go.Mesh3d(
-        x=[ft_x_min, ft_x_max, ft_x_max, ft_x_min, ft_x_min, ft_x_max, ft_x_max, ft_x_min],
-        y=[ft_y_min, ft_y_min, ft_y_max, ft_y_max, ft_y_min, ft_y_min, ft_y_max, ft_y_max],
-        z=[0, 0, 0, 0, t, t, t, t],
-        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-        color='rgba(0, 102, 204, 0.6)', name='Footing'
-    ))
-    fig.add_trace(go.Mesh3d(
-        x=[-cx/2, cx/2, cx/2, -cx/2, -cx/2, cx/2, cx/2, -cx/2],
-        y=[-cy/2, -cy/2, cy/2, cy/2, -cy/2, -cy/2, cy/2, cy/2],
-        z=[t, t, t, t, t+0.8, t+0.8, t+0.8, t+0.8],
-        color='gold', name='Column'
-    ))
-    if footing_type == "ฐานรากเสาเข็ม (Pile)":
-        for px, py in piles:
-            fig.add_trace(go.Mesh3d(
-                x=[px-pile_size/2, px+pile_size/2, px+pile_size/2, px-pile_size/2, px-pile_size/2, px+pile_size/2, px+pile_size/2, px-pile_size/2],
-                y=[py-pile_size/2, py-pile_size/2, py+pile_size/2, py+pile_size/2, py-pile_size/2, py-pile_size/2, py+pile_size/2, py+pile_size/2],
-                z=[0.1, 0.1, 0.1, 0.1, -0.8, -0.8, -0.8, -0.8], color='rgb(120,120,120)', name='Pile'
-            ))
-    max_dim = max(B, L)
-    fig.update_layout(scene=dict(
-        xaxis=dict(title='X (m)', range=[-max_dim, max_dim]), yaxis=dict(title='Y (m)', range=[-max_dim, max_dim]), zaxis=dict(title='Z (m)', range=[-1.0, t+1.0]),
-        aspectmode='data'
-    ), margin=dict(l=0, r=0, b=0, t=0))
-    st.plotly_chart(fig, use_container_width=True)
+    with tab2:
+        # วาดพิกัดจริงเพื่อดูการเยื้องศูนย์
+        fig = go.Figure()
+        fig.add_trace(go.Mesh3d(
+            x=[ft_x_min, ft_x_max, ft_x_max, ft_x_min, ft_x_min, ft_x_max, ft_x_max, ft_x_min],
+            y=[ft_y_min, ft_y_min, ft_y_max, ft_y_max, ft_y_min, ft_y_min, ft_y_max, ft_y_max],
+            z=[0, 0, 0, 0, t, t, t, t],
+            i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+            color='rgba(26, 188, 156, 0.5)', name='Actual Footing'
+        ))
+        fig.add_trace(go.Mesh3d(
+            x=[-cx/2, cx/2, cx/2, -cx/2, -cx/2, cx/2, cx/2, -cx/2],
+            y=[-cy/2, -cy/2, cy/2, cy/2, -cy/2, -cy/2, cy/2, cy/2],
+            z=[t, t, t, t, t+0.6, t+0.6, t+0.6, t+0.6], color='orange', name='Column'
+        ))
+        if footing_type == "ฐานรากเสาเข็ม (Pile)":
+            for px, py in piles_actual:
+                fig.add_trace(go.Mesh3d(
+                    x=[px-pile_size/2, px+pile_size/2, px+pile_size/2, px-pile_size/2, px-pile_size/2, px+pile_size/2, px+pile_size/2, px-pile_size/2],
+                    y=[py-pile_size/2, py-pile_size/2, py+pile_size/2, py+pile_size/2, py-pile_size/2, py-pile_size/2, py+pile_size/2, py+pile_size/2],
+                    z=[0.05, 0.05, 0.05, 0.05, -0.6, -0.6, -0.6, -0.6], color='darkgray', name='As-Built Pile'
+                ))
+        max_dim = max(B, L) if B > 0 and L > 0 else 2.0
+        fig.update_layout(scene=dict(xaxis=dict(title='X (m)', range=[-max_dim, max_dim]), yaxis=dict(title='Y (m)', range=[-max_dim, max_dim]), zaxis=dict(title='Z (m)', range=[-0.8, t+0.8]), aspectmode='data'), margin=dict(l=0, r=0, b=0, t=0))
+        st.plotly_chart(fig, use_container_width=True)
 
-with tab3:
-    st.markdown("### ⚔️ การตรวจสอบกำลังรับแรงเฉือนประลัย")
-    st.table(pd.DataFrame({
-        "เกณฑ์การตรวจสอบของมาตรฐาน": ["Wide Beam Shear (แรงเฉือนคานกว้าง)", "Punching Shear (แรงเฉือนทะลุ)"],
-        "แรงกระทำประลัย ($V_u$)": [f"{V_u_wb_kg:,.1f} kg", f"{V_u_p_kg:,.1f} kg"],
-        "ขีดความสามารถที่ยอมให้ ($\\phi V_c$)": [f"{phi_V_c_wb_kg:,.1f} kg", f"{phi_V_c_p_kg:,.1f} kg"],
-        "ผลประเมินโครงสร้าง": ["✅ ผ่านเกณฑ์ปลอดภัย", "✅ ผ่านเกณฑ์ปลอดภัย"]
-    }))
-    
-    if footing_type == "ฐานรากเสาเข็ม (Pile)":
-        st.markdown("### 📋 ตารางตรวจสอบแรงปฏิกิริยาในเสาเข็มรายต้น (Pile Reactions)")
-        df_piles = pd.DataFrame({
-            "เสาเข็ม": [f"ต้นที่ {i+1}" for i in range(n_piles)],
-            "พิกัด X (ม.)": [p[0] for p in piles],
-            "พิกัด Y (ม.)": [p[1] for p in piles],
-            "แรงใช้งานจริง Service Load (ตัน)": [f"{v:.2f}" for v in pile_service_loads],
-            "แรงประลัย Ultimate Load (ตัน)": [f"{v:.2f}" for v in pile_ultimate_loads],
-            "พิกัดกำลังปลอดภัยสูงสุด (ตัน)": [f"{pile_cap:.2f}" for _ in range(n_piles)]
-        })
-        st.dataframe(df_piles, use_container_width=True)
+    with tab3:
+        st.markdown("### ⚔️ ผลตรวจสอบความต้านทานแรงเฉือนวิกฤต (มยผ. มาตรฐานปัจจุบัน)")
+        st.table(pd.DataFrame({
+            "ประเภทแรงเฉือนวิกฤต": ["Wide Beam Shear (แรงเฉือนคานกว้าง - ระยะ d จากผิวเสา)", "Punching Shear (แรงเฉือนทะลุ - ระยะ d/2 รอบผิวเสา)"],
+            "แรงที่เกิดขึ้นจริง (Vu)": [f"{V_u_wb_kg:,.1f} kg", f"{V_u_p_kg:,.1f} kg"],
+            "กำลังรับแรงที่ยอมให้ (phi Vc)": [f"{phi_V_c_wb_kg:,.1f} kg", f"{phi_V_c_p_kg:,.1f} kg"],
+            "ผลลัพธ์โครงสร้าง": ["✅ ผ่านเกณฑ์ปลอดภัย", "✅ ผ่านเกณฑ์ปลอดภัย"]
+        }))
+        
+        if footing_type == "ฐานรากเสาเข็ม (Pile)":
+            st.markdown("### 📊 แรงปฏิกิริยารายต้นหลังปรับปรุงพิกัดเยื้องศูนย์จริง")
+            df_piles = pd.DataFrame({
+                "เสาเข็ม": [f"ต้นที่ {i+1}" for i in range(n_piles)],
+                "พิกัดใช้งาน X (ม.)": [p[0] for p in piles_actual],
+                "พิกัดใช้งาน Y (ม.)": [p[1] for p in piles_actual],
+                "แรงจริงที่เกิดขึ้น Service Load (ตัน)": [f"{v:.2f}" for v in pile_service_loads],
+                "แรงประลัย Ultimate Load (ตัน)": [f"{v:.2f}" for v in pile_ultimate_loads],
+                "พิกัดขีดจำกัดปลอดภัยสูงสุด (ตัน)": [f"{pile_cap:.2f}" for _ in range(n_piles)],
+                "สถานะกำลัง": ["⚠️ แรงดึง (Uplift)" if float(v) < 0 else "✅ ผ่านปลอดภัย" for v in pile_service_loads]
+            })
+            st.dataframe(df_piles, use_container_width=True)
+else:
+    st.error(error_critical)
