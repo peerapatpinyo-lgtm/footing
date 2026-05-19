@@ -92,7 +92,7 @@ if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rect
     elif n_piles == 8: piles_ideal = [(-1.5*S_dist, -S_dist/2), (-0.5*S_dist, -S_dist/2), (0.5*S_dist, -S_dist/2), (1.5*S_dist, -S_dist/2), (-1.5*S_dist, S_dist/2), (-0.5*S_dist, S_dist/2), (0.5*S_dist, S_dist/2), (1.5*S_dist, S_dist/2)]
     else: piles_ideal = [(x, y) for x in [-S_dist, 0, S_dist] for y in [-S_dist, 0, S_dist]]
 else:
-    # RULE 1: Pure Equilateral Triangle Geometry Center Points
+    # พิกัดกลุ่มเข็ม 3 ต้นแบบสามเหลี่ยมด้านเท่าสมบูรณ์รอบจุดศูนย์ถ่วง (0,0)
     piles_ideal = [
         (0, S_dist / math.sqrt(3)),
         (-S_dist / 2, -S_dist / (2 * math.sqrt(3))),
@@ -132,8 +132,8 @@ I_xx_group = sum(p[1]**2 for p in piles_relative)  # Sum(Y^2)
 if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
     B_ft = (max(p[0] for p in piles_ideal) - min(p[0] for p in piles_ideal)) + 2*E_dist
     L_ft = (max(p[1] for p in piles_ideal) - min(p[1] for p in piles_ideal)) + 2*E_dist
+    H_geometric = L_ft
     footing_area = B_ft * L_ft
-    # พิกัดขอบฐานรากสี่เหลี่ยม
     x_max_edge, x_min_edge = B_ft / 2, -B_ft / 2
     y_max_edge, y_min_edge = L_ft / 2, -L_ft / 2
     concrete_vertices = [
@@ -141,15 +141,18 @@ if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rect
         (x_max_edge, y_max_edge), (x_min_edge, y_max_edge)
     ]
 else:
-    # RULE 1: Enforcing Pure Equilateral Triangle Geometry Foundations Equations
-    H_ft = (math.sqrt(3) / 2) * S_dist + (2 * E_dist)
-    B_ft = S_dist + (2 * math.sqrt(3) * E_dist)
-    footing_area = 0.5 * B_ft * H_ft
+    # RULE 1: Enforcing Pure Equilateral Triangle Geometry Formulas
+    H_ft = (math.sqrt(3) / 2) * S_dist + (2 * E_dist) # สมการควบคุมตัวแปรตามข้อกำหนด
+    B_ft = S_dist + (2 * math.sqrt(3) * E_dist)     # สมการควบคุมตัวแปรตามข้อกำหนด
     
-    # พิกัดจุดยอด 3 มุม กระจายตัวสมมาตรรอบจุดศูนย์ถ่วง (0,0) แท้จริง
-    v1_tri = (0, (2 / 3) * H_ft)
-    v2_tri = (-B_ft / 2, -(1 / 3) * H_ft)
-    v3_tri = (B_ft / 2, -(1 / 3) * H_ft)
+    # ปรับสัดส่วนมิติเพื่อความสมบูรณ์แบบทางเรขาคณิตสามเหลี่ยมด้านเท่าแท้ (ไม่แบนตามรูปทรงเดิม)
+    H_geometric = (math.sqrt(3) / 2) * B_ft
+    footing_area = 0.5 * B_ft * H_geometric
+    
+    # พิกัดจุดยอด 3 มุม กระจายตัวสมมาตรรอบจุดศูนย์ถ่วง (0,0) แท้จริง ไม่กลับแกน
+    v1_tri = (0, (2 / 3) * H_geometric)
+    v2_tri = (-B_ft / 2, -(1 / 3) * H_geometric)
+    v3_tri = (B_ft / 2, -(1 / 3) * H_geometric)
     concrete_vertices = [v2_tri, v3_tri, v1_tri]
 
 # --- RULE 4: NET EDGE DISTANCE VALIDATION (SPALLING GUARD) ---
@@ -164,7 +167,7 @@ for p_act in piles_actual:
         d_top = y_max_edge - (py + p_radius)
         current_min = min(d_left, d_right, d_bottom, d_top)
     else:
-        # คำนวณระยะห่างสั้นที่สุดจากจุดเข็มไปยังขอบเฉือนสามเหลี่ยมทั้ง 3 ด้าน
+        # คำนวณระยะห่างสั้นที่สุดจากจุดเข็มไปยังขอบเฉือนสามเหลี่ยมทั้ง 3 ด้านบนรูปทรงเรขาคณิตจริง
         d_b = py - v2_tri[1] - p_radius
         d_r = point_to_segment_dist(px, py, v3_tri[0], v3_tri[1], v1_tri[0], v1_tri[1]) - p_radius
         d_l = point_to_segment_dist(px, py, v2_tri[0], v2_tri[1], v1_tri[0], v1_tri[1]) - p_radius
@@ -183,15 +186,15 @@ def get_triangular_width_at_y(target_y):
         return B_ft
     if target_y < v2_tri[1] or target_y > v1_tri[1]:
         return 0.0
-    return B_ft * (v1_tri[1] - target_y) / H_ft
+    return B_ft * (v1_tri[1] - target_y) / H_geometric
 
 def get_triangular_height_at_x(target_x):
     """หาความสูงหน้าตัดประสิทธิผลแปรผันตามพิกัดระนาบ X"""
     if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
-        return L_ft
+        return H_geometric
     if abs(target_x) > B_ft / 2:
         return 0.0
-    y_top_limit = v1_tri[1] - (2 * H_ft / B_ft) * abs(target_x)
+    y_top_limit = v1_tri[1] - (2 * H_geometric / B_ft) * abs(target_x)
     return max(0.0, y_top_limit - v2_tri[1])
 
 # --- 9. RULE 2: SHEAR-FIRST OPTIMIZATION LOOP ENGINE ---
@@ -200,11 +203,9 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
     w_u_footing_weight = 1.2 * (footing_area * eval_t * 2.4)
     P_total_factored = P_ultimate + w_u_footing_weight
     
-    # คำนวณสมดุลโมเมนต์ประลัยรวมน้ำหนักบรรทุกและน้ำหนักฐานรากเยื้องศูนย์
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
-    # กระจายแรงปฏิกิริยาประลัยลงสู่เสาเข็มรายต้น (Statical Matrix Distribution)
     p_ult_reactions = []
     for prx, pry in piles_relative:
         R_u = (P_total_factored / n_piles) + \
@@ -219,7 +220,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
     if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
         b_0 = 2 * (b1_box + b2_box)
     else:
-        # ตรรกะ Geometric Clipping สำหรับหักส่วนหน้าตัดทะลุที่หลุดขอบเขตสามเหลี่ยมออกจริง
         p_top, p_bot = cy/2 + eval_d/2, -cy/2 - eval_d/2
         p_right, p_left = cx/2 + eval_d/2, -cx/2 - eval_d/2
         
@@ -229,8 +229,8 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
         len_top_segment = max(0.0, min(p_right, w_top_plane/2) - max(p_left, -w_top_plane/2)) if v2_tri[1] <= p_top <= v1_tri[1] else 0
         len_bot_segment = max(0.0, min(p_right, w_bot_plane/2) - max(p_left, -w_bot_plane/2)) if v2_tri[1] <= p_bot <= v1_tri[1] else 0
         
-        y_lim_left = v1_tri[1] - (2 * H_ft / B_ft) * abs(p_left)
-        y_lim_right = v1_tri[1] - (2 * H_ft / B_ft) * abs(p_right)
+        y_lim_left = v1_tri[1] - (2 * H_geometric / B_ft) * abs(p_left)
+        y_lim_right = v1_tri[1] - (2 * H_geometric / B_ft) * abs(p_right)
         
         len_left_segment = max(0.0, min(p_top, y_lim_left) - max(p_bot, v2_tri[1])) if abs(p_left) <= B_ft/2 else 0
         len_right_segment = max(0.0, min(p_top, y_lim_right) - max(p_bot, v2_tri[1])) if abs(p_right) <= B_ft/2 else 0
@@ -239,7 +239,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
 
     A_punching_cm2 = b_0 * eval_d * 10000
     
-    # หาค่าแรงเฉือนทะลุประลัยสุทธิ (V_u) จากเข็มที่อยู่นอกพื้นที่เจาะทะลุ
     V_u_punching_kg = 0.0
     for idx, (px, py) in enumerate(piles_actual):
         if abs(px) > (cx/2 + eval_d/2) or abs(py) > (cy/2 + eval_d/2):
@@ -247,7 +246,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
             
     v_u_punching_stress = V_u_punching_kg / A_punching_cm2 if A_punching_cm2 > 0 else 0.0
     
-    # พิกัดกำลังต้านทานแรงเฉือนทะลุตามมาตรฐาน ACI
     beta_ratio = max(cx, cy) / min(cx, cy)
     alpha_s = 40 if col_position == "เสาภายใน (Interior)" else (30 if col_position == "เสาขอบ (Edge)" else 20)
     v_c_1 = 0.27 * (2 + 4 / beta_ratio) * math.sqrt(fc_prime)
@@ -320,11 +318,10 @@ for prx, pry in piles_relative:
 # --- 10. FLEXURAL DESIGN MODULE WITH RULE 3 SAFETY GUARDS ---
 w_u_selfweight = 1.2 * t_actual * 2.4
 
-# คำนวณโมเมนต์ประลัยที่ระนาบขอบเสาตอม่อ (Critical Face Cuts)
 if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
-    Mu_face_x_pos = sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2) - 0.5 * w_u_selfweight * ((B_ft/2 - cx/2)**2) * L_ft
-    Mu_face_y_pos = sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2) - 0.5 * w_u_selfweight * ((L_ft/2 - cy/2)**2) * B_ft
-    w_flex_x = L_ft * 100
+    Mu_face_x_pos = sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2) - 0.5 * w_u_selfweight * ((B_ft/2 - cx/2)**2) * H_geometric
+    Mu_face_y_pos = sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2) - 0.5 * w_u_selfweight * ((H_geometric/2 - cy/2)**2) * B_ft
+    w_flex_x = H_geometric * 100
     w_flex_y = B_ft * 100
 else:
     Mu_face_x_pos = sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2)
@@ -348,14 +345,13 @@ def design_rebar_logic(Mu_ton_m, width_cm, d_cm, t_cm):
     Mu_kg_cm = Mu_ton_m * 1000 * 100
     Rn = Mu_kg_cm / (phi_flexure * width_cm * d_cm**2)
     
-    # ตรรกะตรวจเช็คความสมดุลหน้าตัดประสิทธิผล (ACI Code Balanced Framework)
     beta_1 = 0.85 if fc_prime <= 280 else max(0.65, 0.85 - 0.05 * (fc_prime - 280) / 70)
     rho_b = 0.85 * beta_1 * (fc_prime / fy) * (6120 / (6120 + fy))
     rho_max = 0.75 * rho_b
     Rn_max = rho_max * fy * (1 - 0.59 * rho_max * fy / fc_prime)
     
     if Rn > Rn_max or (2 * Rn) / (0.85 * fc_prime) >= 1.0:
-        return 0, 0, True  # RULE 3: Flag Over-reinforced crash state
+        return 0, 0, True  
         
     rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(1 - (2 * Rn) / (0.85 * fc_prime)))
     if rho > rho_max:
@@ -366,14 +362,13 @@ def design_rebar_logic(Mu_ton_m, width_cm, d_cm, t_cm):
     spacing = math.floor((width_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
     return n_bars, min(spacing, 45.0), False
 
-# ทำการรันโมดูลออกแบบเหล็กเสริมหลักคานเหล็กดัด
 n_x_bars, sp_x, crash_x = design_rebar_logic(Mu_design_x, w_flex_x, d_actual*100, t_actual*100)
 n_y_bars, sp_y, crash_y = design_rebar_logic(Mu_design_y, w_flex_y, d_actual*100, t_actual*100)
 is_structure_crashed = crash_x or crash_y or (not step_safe)
 
 # --- 11. RULE 3: INTERCEPT AND HALT UI BLUEPRINT RENDERING IF CRASHED ---
 if is_structure_crashed:
-    st.error("🚨 **[CRITICAL FLEXURE ERROR - OVER-REINFORCED SECTION]** หน้าตัดคอนกรีตเกิดสภาวะแรงดัดเกินพิกัดควบคุมวิกฤต หรือแรงเฉือนไม่สามารถหาค่าที่ปลอดภัยได้ ($\rho > \rho_{max}$) โครงสร้างมีความเสี่ยงขั้นวิบัติพังทลายแบบเปราะ (Sudden Brittle Failure)! ระบบได้ทำการระงับการวาดแผ่นแบบพิมพ์เขียวเพื่อความปลอดภัยทางวิศวกรรม กรุณาเพิ่มความหนาฐานราก (t) ที่แถบควบคุมด้านซ้ายเพื่อกระจายแรงใหม่")
+    st.error("🚨 **[CRITICAL FLEXURE ERROR - OVER-REINFORCED SECTION]** หน้าตัดคอนกรีตเกิดสภาวะแรงดัดเกินพิกัดควบคุมวิกฤต หรือแรงเฉือนไม่สามารถหาค่าที่ปลอดภัยได้ โครงสร้างมีความเสี่ยงขั้นวิบัติพังทลายแบบเปราะ! ระบบได้ทำการระงับการวาดแผ่นแบบพิมพ์เขียวเพื่อความปลอดภัยทางวิศวกรรม กรุณาเพิ่มความหนาฐานราก (t) ที่แถบควบคุมด้านซ้ายเพื่อกระจายแรงใหม่")
 else:
     st.success("✅ **[Structural Integrity Passed]** การตรวจสอบหน่วยแรงเฉือนและปริมาณเหล็กเสริมหลักผ่านเกณฑ์ความปลอดภัยขั้นสูงสุด")
     
@@ -381,23 +376,21 @@ else:
     st.markdown("### 📊 2. แบบวิศวกรรมสถาปัตยกรรมฐานราก (2D Engineering Blueprint)")
     fig, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(14, 5.5))
     
-    # วาดรูปทรงขอบเขตเนื้อคอนกรีตฐานรากตามประเภทจริง
     if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
-        footing_shape_patch = patches.Rectangle((x_min_edge, y_min_edge), B_ft, L_ft, linewidth=2.5, edgecolor='#2c3e50', facecolor='#eaeded', zorder=1)
+        footing_shape_patch = patches.Rectangle((x_min_edge, y_min_edge), B_ft, H_geometric, linewidth=2.5, edgecolor='#2c3e50', facecolor='#eaeded', zorder=1)
         ax_plan.add_patch(footing_shape_patch)
         ax_plan.set_xlim(x_min_edge - 0.4, x_max_edge + 0.4)
         ax_plan.set_ylim(y_min_edge - 0.4, y_max_edge + 0.4)
     else:
+        # พล็อตสามเหลี่ยมด้านเท่าแท้สมบูรณ์แบบไม่บิดเบี้ยวตามสัดส่วนคณิตศาสตร์วิศวกรรม
         footing_shape_patch = patches.Polygon(concrete_vertices, closed=True, linewidth=2.5, edgecolor='#2c3e50', facecolor='#eaeded', zorder=1)
         ax_plan.add_patch(footing_shape_patch)
         ax_plan.set_xlim(-B_ft/2 - 0.4, B_ft/2 + 0.4)
-        ax_plan.set_ylim(-H_ft/3 - 0.4, 2*H_ft/3 + 0.4)
+        ax_plan.set_ylim(-H_geometric/3 - 0.4, 2*H_geometric/3 + 0.4)
         
-    # วาดเสาตอม่อที่พิกัดเซนทรอยด์ศูนย์กลาง
     ax_plan.add_patch(patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.8, edgecolor='#e74c3c', facecolor='#f1948a', zorder=4))
     ax_plan.scatter(cg_actual_x, cg_actual_y, color='#f39c12', marker='X', s=120, label='True C.G.', zorder=5)
     
-    # พล็อตหน้าตัดกลุ่มเสาเข็ม
     for idx, (px, py) in enumerate(piles_actual):
         pile_draw = patches.Circle((px, py), pile_size/2, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.9, zorder=3)
         ax_plan.add_patch(pile_draw)
@@ -407,9 +400,7 @@ else:
     ax_plan.grid(True, linestyle=':', alpha=0.6)
     ax_plan.set_title("แปลนแสดงตำแหน่งกลุ่มเสาเข็มและตอม่อ (Top View)")
     
-    # พล็อตหน้าตัดภาพตัดขวาง 2D Detail Section
     ax_sec.add_patch(patches.Rectangle((-B_ft/2, 0), B_ft, t_actual, linewidth=2, edgecolor='#2c3e50', facecolor='#f2f4f4'))
-    # เส้นแสดงแนวเหล็กเสริมตะแกรงล่าง
     ax_sec.plot([-B_ft/2 + 0.075, B_ft/2 - 0.075], [0.075, 0.075], color='#1f618d', linewidth=3.0, label='Bottom Rebar')
     ax_sec.text(0, t_actual/2, f"ความหนา t = {t_actual*100:.0f} cm\nเหล็กหลักแกน X: DB{bar_dia} @ {sp_x:.0f} cm\nเหล็กหลักแกน Y: DB{bar_dia} @ {sp_y:.0f} cm", ha='center', va='center', color='#232b2b', fontsize=9, fontweight='bold')
     ax_sec.set_xlim(-B_ft/2 - 0.2, B_ft/2 + 0.2)
@@ -439,7 +430,6 @@ with tab1:
 
 with tab2:
     st.subheader("🌐 Interactive 3D Real-Scale Boundary Solid Mesh")
-    # RULE 6: บังคับการประมวลผล 3D Mesh ตามรูปทรงคอนกรีตจริงผ่านพิกัดพหุเหลี่ยม
     if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
         mesh_x = [x_min_edge, x_max_edge, x_max_edge, x_min_edge, x_min_edge, x_max_edge, x_max_edge, x_min_edge]
         mesh_y = [y_min_edge, y_min_edge, y_max_edge, y_max_edge, y_min_edge, y_min_edge, y_max_edge, y_max_edge]
@@ -448,7 +438,7 @@ with tab2:
         j_idx = [1, 2, 5, 6, 4, 5, 6, 7, 3, 2, 6, 7]
         k_idx = [2, 3, 6, 7, 1, 2, 3, 0, 4, 5, 2, 3]
     else:
-        # พิกัดโครงข่าย Prism 3 มิติ สำหรับฐานรากสามเหลี่ยมด้านเท่า
+        # พิกัดโครงข่าย Prism 3 มิติสำหรับสามเหลี่ยมด้านเท่าแท้หลังการปรับอัตราส่วนสัดส่วนสัมพันธ์
         mesh_x = [v2_tri[0], v3_tri[0], v1_tri[0], v2_tri[0], v3_tri[0], v1_tri[0]]
         mesh_y = [v2_tri[1], v3_tri[1], v1_tri[1], v2_tri[1], v3_tri[1], v1_tri[1]]
         mesh_z = [0, 0, 0, t_actual, t_actual, t_actual]
