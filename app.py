@@ -507,11 +507,18 @@ with tab2:
     fig_3d.update_layout(scene=dict(xaxis=dict(title='X (m)'), yaxis=dict(title='Y (m)'), zaxis=dict(title='Z (m)'), aspectmode='data'), margin=dict(l=0, r=0, b=0, t=30))
     st.plotly_chart(fig_3d, use_container_width=True)
 
-
 with tab3:
     st.subheader("📋 เล่มรายการคำนวณวิศวกรรมควบคุมฉบับสมบูรณ์ (Ultimate Calculation Report)")
     st.markdown("อ้างอิงมาตรฐานควบคุม: **ACI 318-19 / มยผ. 1301/1302-61**")
     st.markdown("---")
+    
+    # =========================================================================
+    # [CRITICAL FIX] ประกาศและคำนวณตัวแปรเรขาคณิตวิกฤตต้นสาย เพื่อป้องกัน NameError
+    # =========================================================================
+    b1_box, b2_box = cx + d_actual, cy + d_actual
+    b_0_len = 2 * (b1_box + b2_box)
+    cut_y_pos = cy/2 + d_actual
+    bw_y_width = get_triangular_width_at_y(cut_y_pos)
     
     # คำนวณหา Utilization Ratios (D/C Ratio) เพื่อใช้ทำกราฟสถานะ
     max_pile_s = max(pile_service_reactions)
@@ -623,7 +630,7 @@ with tab3:
     # ---------------------------------------------------------------------
     # SECTION 4: REBAR REINFORCEMENT MATHEMATICS
     # ---------------------------------------------------------------------
-    st.markdown("#### 鋼 4. พารามิเตอร์การออกแบบและจัดเหล็กเสริมเสริมหลัก (Flexural Design Parameters)")
+    st.markdown("#### 📐 4. พารามิเตอร์การออกแบบและจัดเหล็กเสริมเสริมหลัก (Flexural Design Parameters)")
     st.markdown(
         "คำนวณปริมาณเหล็กเสริมตามทฤษฎีกำลังประลัย (Ultimate Strength Design - USD) "
         "โดยมีเกณฑ์ขั้นต่ำควบคุมด้วยอัตราส่วนเหล็กต้านการยืดหดตัวจากอุณหภูมิ $\\rho_{{min}} = 0.0018$"
@@ -640,9 +647,9 @@ with tab3:
     })
     st.dataframe(df_rebar_matrix, use_container_width=True, hide_index=True)
 
-    # 🛡️ ตรวจสอบเกณฑ์ระยะฝังเหล็กเส้นเพื่อความสมบูรณ์แบบสูงสุด
+    # ตรวจสอบเกณฑ์ระยะฝังเหล็กเส้น
     st.markdown("##### 🔍 4.1 การตรวจสอบระยะยึดเกาะรั้งดึง (Development Length Check)")
-    l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10) # สมการอย่างง่าย ACI 318
+    l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
     available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
     
     st.markdown(
