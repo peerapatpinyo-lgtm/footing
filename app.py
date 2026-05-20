@@ -534,4 +534,4 @@ with tab3:
             return 'background-color: #fff3cd; color: #856404;'
         return 'background-color: #d4edda; color: #155724;'
 
-    st.dataframe(df_pile_output.style.map(highlight_pile_rows, subset=['สถานะวิศวกรรมปฏิกิริ']), use_container_width=True, hide_index=True)
+    st.dataframe(df_pile_output.style.map(highlight_pile_rows, subset=['สถานะวิศวกรรมปฏิกิริยา']), use_container_width=True, hide_index=True)
