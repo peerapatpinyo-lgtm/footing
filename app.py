@@ -513,12 +513,25 @@ with tab3:
     st.markdown("---")
     
     # =========================================================================
-    # [CRITICAL FIX] ประกาศและคำนวณตัวแปรเรขาคณิตวิกฤตต้นสาย เพื่อป้องกัน NameError
+    # [CRITICAL FIX 1] ประกาศและคำนวณตัวแปรเรขาคณิตวิกฤตต้นสาย เพื่อป้องกัน NameError
     # =========================================================================
     b1_box, b2_box = cx + d_actual, cy + d_actual
     b_0_len = 2 * (b1_box + b2_box)
     cut_y_pos = cy/2 + d_actual
     bw_y_width = get_triangular_width_at_y(cut_y_pos)
+    
+    # =========================================================================
+    # [CRITICAL FIX 2] แยกการคำนวณแรงเฉือนรวม (ตัน -> กิโลกรัม) ออกมานอก f-string ป้องกัน ValueError
+    # =========================================================================
+    # 1. แรงเฉือนทะลุรวม (คิดเฉพาะค่าที่เป็นแรงอัดบวก)
+    Vu_punch_kg = float(sum(max(0.0, float(p)) for p in p_ult_out)) * 1000.0
+    
+    # 2. แรงเฉือนคานกว้างรวม (คิดเฉพาะเข็มที่อยู่ในโซนระนาบวิกฤต Y)
+    Vu_wb_kg = 0.0
+    for idx, p in enumerate(p_ult_out):
+        if piles_actual[idx][1] >= cut_y_pos:
+            Vu_wb_kg += max(0.0, float(p))
+    Vu_wb_kg = Vu_wb_kg * 1000.0
     
     # คำนวณหา Utilization Ratios (D/C Ratio) เพื่อใช้ทำกราฟสถานะ
     max_pile_s = max(pile_service_reactions)
@@ -604,7 +617,7 @@ with tab3:
         f"เกิดเส้นรอบวงวิกฤต $b_0 = {b_0_len*100:.1f}$ ซม."
     )
     st.markdown(
-        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_0 \\cdot d}} = \\frac{{{sum(max(0.0, p*1000) for p in p_ult_out):.1.f} \\text{{ kg}}}}{{{b_0_len*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_up:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$$"
+        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_0 \\cdot d}} = \\frac{{{Vu_punch_kg:.1f} \\text{{ kg}}}}{{{b_0_len*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_up:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$$"
     )
     if v_up <= v_cp:
         st.success(f"✅ **Safe (ผ่านเกณฑ์):** หน่วยแรงเฉือนทะลุที่เกิดขึ้นจริงต่ำกว่ากำลังรับแรงของคอนกรีตอ้างอิงมาตรฐาน ACI 318")
@@ -618,7 +631,7 @@ with tab3:
         f"ความกว้างเนื้อคอนกรีตที่ระนาบตัดนี้ $b_w = {bw_y_width*100:.1f}$ ซม."
     )
     st.markdown(
-        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_w \\cdot d}} = \\frac{{{sum(max(0.0, p*1000) for idx, p in enumerate(p_ult_out) if piles_actual[idx][1] >= cut_y_pos):.1.f} \\text{{ kg}}}}{{{bw_y_width*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_uwb:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$$"
+        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_w \\cdot d}} = \\frac{{{Vu_wb_kg:.1f} \\text{{ kg}}}}{{{bw_y_width*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_uwb:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$$"
     )
     if v_uwb <= v_cwb:
         st.success(f"✅ **Safe (ผ่านเกณฑ์):** หน่วยแรงเฉือนแบบคานกว้างผ่านตามข้อกำหนดความปลอดภัย")
