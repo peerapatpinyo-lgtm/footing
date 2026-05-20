@@ -379,7 +379,7 @@ with col_adv2:
         st.success("✅ **สถานะเสาเข็ม:** แรงปฏิกิริยารายต้นเสาเข็มผ่านเกณฑ์พิกัดต้านทานใช้งาน")
 
 # =========================================================================
-# [4] ADVANCED 2D VISUALIZATIONS
+# [4] ADVANCED 2D VISUALIZATIONS (UPDATED: VISUAL EMBEDDED DEVIATIONS CORRELATION)
 # =========================================================================
 if not is_structure_crashed:
     st.markdown("### 📊 3. แบบวิศวกรรมสถาปัตยกรรมฐานราก (2D Engineering Blueprint)")
@@ -399,10 +399,28 @@ if not is_structure_crashed:
     ax_plan.scatter(cg_actual_x, cg_actual_y, color='#f39c12', marker='X', s=130, label='True C.G. of Piles', zorder=5)
     ax_plan.plot([0, cg_actual_x], [0, cg_actual_y], color='#8e44ad', linestyle='--', linewidth=2, label='Global Eccentricity', zorder=4)
     
+    # วาดตำแหน่งเสาเข็มเปรียบเทียบ (ตามตารางที่ 1 เพื่อเห็นภาพชัดเจน)
     for idx, (px, py) in enumerate(piles_actual):
+        ix, iy = piles_ideal[idx]
+        
+        # 1. วาดเสาเข็มตามแบบดั้งเดิม (Design Ideal) -> เส้นปรุ สีเทาจาง
+        pile_ideal_draw = patches.Circle((ix, iy), pile_size/2, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2)
+        ax_plan.add_patch(pile_ideal_draw)
+        
+        # 2. วาดเสาเข็มที่ขยับหนีศูนย์จริง (As-Built Actual) -> สีทึบ
         pile_draw = patches.Circle((px, py), pile_size/2, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3)
         ax_plan.add_patch(pile_draw)
         ax_plan.text(px, py, f"P{idx+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold', zorder=4)
+        
+        # 3. ลากเส้นแสดงระยะเบี่ยงเบนจากตาราง 1 (Deviation Vector) หากมีค่าหนีศูนย์จริง
+        if ix != px or iy != py:
+            ax_plan.plot([ix, px], [iy, py], color='#e74c3c', linestyle='-', linewidth=1.8, zorder=4)
+            ax_plan.scatter(ix, iy, color='#e74c3c', marker='.', s=40, zorder=4)
+            
+    # เพิ่มรายการสัญลักษณ์ (Legend Customization) ให้สัมพันธ์กับตารางสำรวจ
+    ax_plan.plot([], [], color='#bdc3c7', linestyle='--', linewidth=1.5, label='Design Pile Position (ตามแผน)')
+    ax_plan.plot([], [], color='#34495e', marker='o', markersize=8, facecolor='#7f8c8d', linestyle='none', label='As-Built Pile Position (หน้างานจริง)')
+    ax_plan.plot([], [], color='#e74c3c', linestyle='-', linewidth=1.8, label='Field Deviation Vector (ระยะหนีศูนย์)')
         
     ax_plan.set_aspect('equal')
     ax_plan.grid(True, linestyle=':', alpha=0.6)
@@ -415,7 +433,11 @@ if not is_structure_crashed:
     
     embed_m = pile_embed_cm / 100
     for idx, (px, py) in enumerate(piles_actual):
+        ix, iy = piles_ideal[idx]
         if abs(py) < L_ft/2: 
+            # เสาเข็มตำแหน่งตามทฤษฎีในรูปตัด (เงาเส้นปรุ)
+            ax_sec.add_patch(patches.Rectangle((ix - pile_size/2, -0.4), pile_size, 0.4 + embed_m, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.5, zorder=1))
+            # เสาเข็มตามตำแหน่งจริงเยื้องศูนย์หน้างาน (รูปตัดคอนกรีตทึบ)
             ax_sec.add_patch(patches.Rectangle((px - pile_size/2, -0.4), pile_size, 0.4 + embed_m, linewidth=1.8, edgecolor='#34495e', facecolor='#95a5a6', zorder=1))
     
     cov_m = concrete_cover_cm / 100
