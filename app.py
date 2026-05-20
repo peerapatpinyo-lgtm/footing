@@ -507,117 +507,149 @@ with tab2:
     fig_3d.update_layout(scene=dict(xaxis=dict(title='X (m)'), yaxis=dict(title='Y (m)'), zaxis=dict(title='Z (m)'), aspectmode='data'), margin=dict(l=0, r=0, b=0, t=30))
     st.plotly_chart(fig_3d, use_container_width=True)
 
+
 with tab3:
-    st.subheader("📋 รายการคำนวณเชิงเลขและหน่วยแรงวิกฤต (Detailed Engineering Calculation Report)")
-    st.markdown("ระบบคำนวณตามมาตรฐาน **EIT 1007-34 / ACI 318** แบบแยกแยะพิกัดแรง")
+    st.subheader("📋 เล่มรายการคำนวณวิศวกรรมควบคุมฉบับสมบูรณ์ (Ultimate Calculation Report)")
+    st.markdown("อ้างอิงมาตรฐานควบคุม: **ACI 318-19 / มยผ. 1301/1302-61**")
+    st.markdown("---")
+    
+    # คำนวณหา Utilization Ratios (D/C Ratio) เพื่อใช้ทำกราฟสถานะ
+    max_pile_s = max(pile_service_reactions)
+    pile_ur = max_pile_s / pile_cap
+    punching_ur = v_up / v_cp if v_cp > 0 else 1.0
+    wide_beam_ur = v_uwb / v_cwb if v_cwb > 0 else 1.0
     
     # ---------------------------------------------------------------------
-    # SECTION 1: PROPERTIES & PILE REACTIONS
+    # SECTION 1: EXECUTIVE SAFETY RATIO (D/C RATIO)
     # ---------------------------------------------------------------------
-    st.markdown("#### 1. คุณสมบัติหน้าตัดและปฏิกิริยาเสาเข็ม (Section Properties & Pile Reactions)")
+    st.markdown("#### 📊 1. ดัชนีประสิทธิภาพและการใช้กำลังโครงสร้าง (Demand/Capacity Utilization)")
     
-    col_t3_1, col_t3_2 = st.columns(2)
-    with col_t3_1:
+    col_ur1, col_ur2, col_ur3 = st.columns(3)
+    with col_ur1:
+        st.metric("Pile Load Capacity UR", f"{pile_ur*100:.1f} %", delta=f"{100 - pile_ur*100:.1f}% Margin", delta_color="inverse")
+        st.progress(min(max(pile_ur, 0.0), 1.0))
+    with col_ur2:
+        st.metric("Punching Shear UR", f"{punching_ur*100:.1f} %", delta=f"{100 - punching_ur*100:.1f}% Margin", delta_color="inverse")
+        st.progress(min(max(punching_ur, 0.0), 1.0))
+    with col_ur3:
+        st.metric("Wide-Beam Shear UR", f"{wide_beam_ur*100:.1f} %", delta=f"{100 - wide_beam_ur*100:.1f}% Margin", delta_color="inverse")
+        st.progress(min(max(wide_beam_ur, 0.0), 1.0))
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------------------
+    # SECTION 2: PILE GROUP MECHANICS & DETAIL REACTION
+    # ---------------------------------------------------------------------
+    st.markdown("#### 🏗️ 2. กลศาสตร์กลุ่มเสาเข็มและการกระจายหน่วยแรง (Pile Group Mechanics)")
+    st.markdown(
+        "วิเคราะห์การกระจายแรงด้วยวิธี **Rigid Foundation Method** พิจารณาพิกัดหนีศูนย์จริง (As-Built Deviation) "
+        "โดยส่งผลให้เกิดจุดศูนย์ถ่วงสัมพัทธ์เปลี่ยนแปลงไปจากศูนย์กลางตอม่อ"
+    )
+    
+    st.markdown(
+        r"$$\text{สมการหลักทางการคำนวณ: } R_i = \frac{P_{total}}{n} \pm \frac{M_{y,total} \cdot x_i}{I_{yy}} \pm \frac{M_{x,total} \cdot y_i}{I_{xx}}$$"
+    )
+    
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
         st.markdown(f"""
-        **พารามิเตอร์กลุ่มเสาเข็ม:**
+        **ผลลัพธ์คุณสมบัติหน้าตัดเชิงเรขาคณิต (Sectional Properties):**
+        * จำนวนเสาเข็มในกลุ่ม ($n$): `{n_piles}` ต้น
         * โมเมนต์ความเฉื่อยกลุ่มเข็มแกน X ($I_{{xx}}$): `{I_xx_group:.4f}` $m^2$
         * โมเมนต์ความเฉื่อยกลุ่มเข็มแกน Y ($I_{{yy}}$): `{I_yy_group:.4f}` $m^2$
-        * ระยะเยื้องศูนย์รวมแกน X ($e_x$): `{ecc_x:.3f}` m
-        * ระยะเยื้องศูนย์รวมแกน Y ($e_y$): `{ecc_y:.3f}` m
+        * พิกัดศูนย์กลางมวลเข็มเยื้องจากศูนย์ตอม่อ ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
         """)
-    with col_t3_2:
+    with col_v2:
         st.markdown(f"""
-        **สมการวิเคราะห์แรงปฏิกิริยาเสาเข็มรายต้น:**
-        $$R = \\frac{{P_{{total}}}}{{n}} \\pm \\frac{{M_{{y,total}} \\cdot x}}{{I_{{yy}}}} \\pm \\frac{{M_{{x,total}} \\cdot y}}{{I_{{xx}}}}$$
-        * น้ำหนักบรรทุกใช้งานรวม ($P_{{service,total}}$): **{P_service_total:.2f}** ตัน
-        * น้ำหนักบรรทุกประลัยรวม ($P_{{ultimate,total}}$): **{(P_ultimate + 1.2*(w_s_footing + W_soil)):.2f}** ตัน
+        **น้ำหนักบรรทุกและโมเมนต์ดัดรวมลงสู่ฐานราก (Combined External Forces):**
+        * แรงบริการรวมแกน ($P_{{service,total}}$): `{P_service_total:.2f}` ตัน
+        * แรงประลัยรวมแกน ($P_{{ultimate,total}}$): `{(P_ultimate + 1.2*(w_s_footing + W_soil)):.2f}` ตัน
+        * โมเมนต์ประลัยรวมดัดรอบแกน X ($M_{{u,x,total}}$): `{Mu_cx + (P_ultimate + 1.2*(w_s_footing + W_soil))*(-ecc_y):.2f}` ตัน-เมตร
+        * โมเมนต์ประลัยรวมดัดรอบแกน Y ($M_{{u,y,total}}$): `{Mu_cy + (P_ultimate + 1.2*(w_s_footing + W_soil))*(-ecc_x):.2f}` ตัน-เมตร
         """)
 
-    # ตารางสรุปแรงปฏิกิริยา
-    pile_status = []
-    for r_s in pile_service_reactions:
-        if r_s > pile_cap: pile_status.append("❌ Overload (แรงอัดเกิน)")
-        elif r_s < 0 and abs(r_s) > pile_tension_cap: pile_status.append("❌ Tension Over (แรงถอนเกิน)")
-        else: pile_status.append("✅ Pass (ผ่านเกณฑ์)")
-
-    df_pile_output = pd.DataFrame({
-        "เสาเข็ม": [f"P{i+1}" for i in range(n_piles)],
-        "พิกัด X (m)": [p[0] for p in piles_relative],
-        "พิกัด Y (m)": [p[1] for p in piles_relative],
-        "แรงใช้งาน Service (ตัน)": [round(x, 2) for x in pile_service_reactions],
-        "แรงประลัย Ultimate (ตัน)": [round(x, 2) for x in p_ult_out],
-        "ผลตรวจสอบ": pile_status
-    })
-    st.dataframe(df_pile_output, use_container_width=True, hide_index=True)
+    # ตารางแจกแจงผลลัพธ์รายต้นแบบละเอียด
+    pile_results_detailed = []
+    for i in range(n_piles):
+        p_status = "✅ Pass" if pile_service_reactions[i] <= pile_cap and pile_service_reactions[i] >= -pile_tension_cap else "❌ Overstressed"
+        pile_results_detailed.append({
+            "ชื่อเสาเข็ม": f"P{i+1}",
+            "พิกัดจริง X (m)": round(piles_relative[i][0], 3),
+            "พิกัดจริง Y (m)": round(piles_relative[i][1], 3),
+            "แรงอัดใช้งาน (ตัน)": round(pile_service_reactions[i], 2),
+            "แรงอัดจำกัด (ตัน)": round(pile_cap, 2),
+            "แรงประลัย U.L. (ตัน)": round(p_ult_out[i], 2),
+            "ผลการตรวจสอบ": p_status
+        })
+    st.dataframe(pd.DataFrame(pile_results_detailed), use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # SECTION 2: SHEAR STRESS ANALYSIS
+    # SECTION 3: DETAILED SHEAR VERIFICATION (WITH SUBSTITUTION)
     # ---------------------------------------------------------------------
-    st.markdown("#### 2. การวิเคราะห์หน่วยแรงเฉือนวิกฤต (Critical Shear Stress Validation)")
+    st.markdown("#### 📐 3. รายการวิเคราะห์และแทนค่าตัวเลขแรงเฉือนวิกฤต (Critical Shear Stress Substitution)")
     
-    # 2.1 Punching Shear
-    st.markdown("##### 📌 แรงเฉือนทะลุ (Punching Shear / Two-Way Shear)")
-    b1_box, b2_box = cx + d_actual, cy + d_actual
-    b_0_len = 2 * (b1_box + b2_box)
-    
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        st.markdown(f"""
-        **ค่าที่คำนวณได้จากโมเดล:**
-        * เส้นรอบวงวิกฤต ($b_0$): `{b_0_len:.2f}` m ที่ระยะ $d/2 = {d_actual/2:.3f}$ m จากผิวตอม่อ
-        * หน่วยแรงเฉือนทะลุประลัย ($v_u$): **{v_up:.2f}** $ksc$
-        """)
-    with col_p2:
-        status_p = "🚨 เกินค่าจำกัด (FAIL)" if v_up > v_cp else "✅ ปลอดภัย (PASS)"
-        st.markdown(f"""
-        **เกณฑ์ข้อกำหนดมาตรฐาน:**
-        * หน่วยแรงเฉือนทะลุที่ยอมให้ ($\\phi v_c$): **{v_cp:.2f}** $ksc$
-        * สถานะการตรวจสอบ: **{status_p}**
-        """)
-    st.caption(f"สมการควบคุม: $\\phi v_c = \\phi \\cdot 1.06 \\sqrt{{f'_c}}$ (หรือตามเงื่อนไขอัตราส่วนรูปทรงเสาตอม่อที่วิกฤตที่สุด)")
+    # Punching Shear Detail
+    st.markdown("##### 📌 3.1 การตรวจสอบแรงเฉือนทะลุ (Punching Shear Validation)")
+    st.markdown(
+        f"หน้าตัดวิกฤตห่างจากผิวตอม่อเป็นระยะ $d/2 = {d_actual*100/2:.1f}$ ซม. "
+        f"เกิดเส้นรอบวงวิกฤต $b_0 = {b_0_len*100:.1f}$ ซม."
+    )
+    st.markdown(
+        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_0 \\cdot d}} = \\frac{{{sum(max(0.0, p*1000) for p in p_ult_out):.1.f} \\text{{ kg}}}}{{{b_0_len*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_up:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$$"
+    )
+    if v_up <= v_cp:
+        st.success(f"✅ **Safe (ผ่านเกณฑ์):** หน่วยแรงเฉือนทะลุที่เกิดขึ้นจริงต่ำกว่ากำลังรับแรงของคอนกรีตอ้างอิงมาตรฐาน ACI 318")
+    else:
+        st.error(f"❌ **Unsafe (ไม่ผ่านเกณฑ์):** หน่วยแรงเฉือนทะลุเกินมาตรฐาน แนะนำให้เพิ่มความหนาฐานราก (t) หรือเพิ่มเกรดคอนกรีต")
 
-    # 2.2 Wide-Beam Shear
-    st.markdown("##### 📌 แรงเฉือนแบบคานกว้าง (Wide-Beam Shear / One-Way Shear)")
-    cut_y_pos = cy/2 + d_actual
-    bw_y_width = get_triangular_width_at_y(cut_y_pos)
-    
-    col_w1, col_w2 = st.columns(2)
-    with col_w1:
-        st.markdown(f"""
-        **ค่าที่คำนวณได้จากโมเดล (หน้าตัดวิกฤตแนวแกน Y):**
-        * ความกว้างหน้าตัดที่ระนาบตัด ($b_w$): `{bw_y_width:.2f}` m ที่ระยะ $d = {d_actual:.3f}$ m จากผิวตอม่อ
-        * หน่วยแรงเฉือนคานกว้างประลัย ($v_u$): **{v_uwb:.2f}** $ksc$
-        """)
-    with col_w2:
-        status_w = "🚨 เกินค่าจำกัด (FAIL)" if v_uwb > v_cwb else "✅ ปลอดภัย (PASS)"
-        st.markdown(f"""
-        **เกณฑ์ข้อกำหนดมาตรฐาน:**
-        * หน่วยแรงเฉือนคานกว้างที่ยอมให้ ($\\phi v_c$): **{v_cwb:.2f}** $ksc$
-        * สถานะการตรวจสอบ: **{status_w}**
-        """)
-    st.caption("สมการควบคุม: $\\phi v_c = \\phi \\cdot 0.53 \\sqrt{{f'_c}}$")
+    # Wide-Beam Shear Detail
+    st.markdown("##### 📌 3.2 การตรวจสอบแรงเฉือนแบบคานกว้าง (Wide-Beam Shear Validation)")
+    st.markdown(
+        f"หน้าตัดวิกฤตคิดที่ระนาบตัดตรงจุดที่ห่างจากผิวตอม่อออกไปเป็นระยะ $d = {d_actual*100:.1f}$ ซม. "
+        f"ความกว้างเนื้อคอนกรีตที่ระนาบตัดนี้ $b_w = {bw_y_width*100:.1f}$ ซม."
+    )
+    st.markdown(
+        f"$$\\text{{แทนค่าตัวเลข: }} v_u = \\frac{{V_u}}{{b_w \\cdot d}} = \\frac{{{sum(max(0.0, p*1000) for idx, p in enumerate(p_ult_out) if piles_actual[idx][1] >= cut_y_pos):.1.f} \\text{{ kg}}}}{{{bw_y_width*100:.1f} \\text{{ cm}} \\times {d_actual*100:.1f} \\text{{ cm}}}} = {v_uwb:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$$"
+    )
+    if v_uwb <= v_cwb:
+        st.success(f"✅ **Safe (ผ่านเกณฑ์):** หน่วยแรงเฉือนแบบคานกว้างผ่านตามข้อกำหนดความปลอดภัย")
+    else:
+        st.error(f"❌ **Unsafe (ไม่ผ่านเกณฑ์):** หน้าตัดเสี่ยงต่อการวิบัติด้วยแรงเฉือนแบบคานคานกว้าง")
 
     st.markdown("---")
 
     # ---------------------------------------------------------------------
-    # SECTION 3: FLEXURAL REBAR DESIGN MATRIX
+    # SECTION 4: REBAR REINFORCEMENT MATHEMATICS
     # ---------------------------------------------------------------------
-    st.markdown("#### 3. การออกแบบปริมาณเหล็กเสริมรับโมเมนต์ดัด (Flexural Reinforcement Design Matrix)")
+    st.markdown("#### 鋼 4. พารามิเตอร์การออกแบบและจัดเหล็กเสริมเสริมหลัก (Flexural Design Parameters)")
+    st.markdown(
+        "คำนวณปริมาณเหล็กเสริมตามทฤษฎีกำลังประลัย (Ultimate Strength Design - USD) "
+        "โดยมีเกณฑ์ขั้นต่ำควบคุมด้วยอัตราส่วนเหล็กต้านการยืดหดตัวจากอุณหภูมิ $\\rho_{{min}} = 0.0018$"
+    )
     
     df_rebar_matrix = pd.DataFrame({
-        "ทิศทางพิจารณา": ["เหล็กเสริมหลัก แกน X (Main X)", "เหล็กเสริมหลัก แกน Y (Main Y)"],
-        "โมเมนต์ดัดประลัยที่ผิวเสา M_u (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
-        "ความกว้างหน้าตัดประสิทธิผล b (cm)": [round(w_flex_x, 1), round(w_flex_y, 1)],
-        "เนื้อที่เหล็กเสริมต้องการ A_s,req (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
-        "ขนาดเหล็กที่เลือกใช้": [f"DB{bar_dia}", f"DB{bar_dia}"],
-        "จำนวนเส้นรวมที่คำนวณ": [f"{n_main_bars_x} เส้น", f"{n_main_bars_y} เส้น"],
-        "ระยะห่าง Spacing (cm)": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
+        "พิกัดแกน": ["แกน X (Main Reinforcement)", "แกน Y (Transverse Reinforcement)"],
+        "โมเมนต์ออกแบบ Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
+        "ความกว้างประสิทธิผล b (cm)": [round(w_flex_x, 1), round(w_flex_y, 1)],
+        "พื้นที่เหล็กต้องการ As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
+        "เหล็กเสริมที่จัดใช้งานจริง": [f"DB{bar_dia} ทั้งหมด {n_main_bars_x} เส้น", f"DB{bar_dia} ทั้งหมด {n_main_bars_y} เส้น"],
+        "ระยะห่างการติดตั้ง": [f"Every {sp_main_x:.0f} cm c/c", f"Every {sp_main_y:.0f} cm c/c"],
+        "พื้นที่เหล็กจริงที่ให้ (cm²)": [round(n_main_bars_x * ab_area, 2), round(n_main_bars_y * ab_area, 2)]
     })
     st.dataframe(df_rebar_matrix, use_container_width=True, hide_index=True)
+
+    # 🛡️ ตรวจสอบเกณฑ์ระยะฝังเหล็กเส้นเพื่อความสมบูรณ์แบบสูงสุด
+    st.markdown("##### 🔍 4.1 การตรวจสอบระยะยึดเกาะรั้งดึง (Development Length Check)")
+    l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10) # สมการอย่างง่าย ACI 318
+    available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
     
-    st.markdown(f"""
-    > 💡 **Engineering Note:** > * ปริมาณเหล็กเสริมขั้นต่ำคำนวณตามเกณฑ์ควบคุมการยืดหดตัวเนื่องจากอุณหภูมิ (Shrinkage Reinforcement Ratio) = $0.0018 \\cdot b \\cdot t$ 
-    > * ระยะห่างเหล็กเสริมสุทธิได้รับการควบคุมไม่ให้เกินกว่า $45$ ซม. หรือ $3 \\cdot t$ เพื่อป้องกันการเกิดรอยร้าวลึกในเนื้อคอนกรีตฐานรากตามมาตรฐานวิศวกรรม
-    """)
+    st.markdown(
+        f" * ระยะพัฒนาเหล็กเส้นตึงวิกฤตที่ต้องการ ($L_d$): **{l_d_required:.1f} ซม.** "
+        f" | ระยะเนื้อคอนกรีตที่เหลือให้ฝังจริง: **{available_length_x:.1f} ซม.**"
+    )
+    if available_length_x >= l_d_required:
+        st.success("✅ **Pass:** ระยะฝังคอนกรีตมีเพียงพอในการพัฒนาแรงดึงของเหล็กเสริมหลัก ไม่จำเป็นต้องทำงอฉาก 90 องศามาตรฐานเพื่อช่วยยึดเกาะ")
+    else:
+        st.warning("⚠️ **คัดค้านเชิงวิศวกรรม:** ปลายเหล็กเสริมหลักต้องทำการ **งอขอมาตรฐาน 90 องศา (Standard Hook)** เนื่องจากระยะตรงพิกัดคอนกรีตขอบฐานรากสั้นเกินไป")
