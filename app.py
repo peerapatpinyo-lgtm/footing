@@ -419,7 +419,7 @@ if not is_structure_crashed:
             
     # เพิ่มรายการสัญลักษณ์ (Legend Customization) ให้สัมพันธ์กับตารางสำรวจ
     ax_plan.plot([], [], color='#bdc3c7', linestyle='--', linewidth=1.5, label='Design Pile Position (ตามแผน)')
-    ax_plan.plot([], [], color='#34495e', marker='o', markersize=8, facecolor='#7f8c8d', linestyle='none', label='As-Built Pile Position (หน้างานจริง)')
+    ax_plan.plot([], [], color='#34495e', marker='o', markersize=8, markerfacecolor='#7f8c8d', linestyle='none', label='As-Built Pile Position (หน้างานจริง)')
     ax_plan.plot([], [], color='#e74c3c', linestyle='-', linewidth=1.8, label='Field Deviation Vector (ระยะหนีศูนย์)')
         
     ax_plan.set_aspect('equal')
