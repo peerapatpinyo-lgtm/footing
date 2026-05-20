@@ -222,15 +222,26 @@ def get_triangular_width_at_y(target_y):
 # =========================================================================
 # [1] ENGINEERING CALCULATIONS CORE (LOAD, REACTION, & UPDATED SHEAR)
 # =========================================================================
-# [1.1] คำนวณน้ำหนักดินถมสุทธิ W_soil = พื้นที่ฐานรากสุทธิ (ไม่รวมพื้นที่เสาตอม่อ) x ความลึกดิน x ความหนาแน่นดิน
+
+# [1.0] คำนวณน้ำหนักบรรทุกใช้งานและประลัย (Service & Ultimate Loads) ตาม ACI
+P_service = DL + LL
+P_ultimate = (1.2 * DL) + (1.6 * LL)
+
+# คำนวณ Load Factor เฉลี่ยเพื่อแปลงโมเมนต์ใช้งาน (Service) ให้เป็นโมเมนต์ประลัย (Ultimate)
+average_load_factor = P_ultimate / P_service if P_service > 0 else 1.45
+Mu_cx = Mcx * average_load_factor
+Mu_cy = Mcy * average_load_factor
+
+# [1.1] คำนวณน้ำหนักดินถมสุทธิ W_soil
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
 def execute_shear_evaluation_routine(eval_d, eval_t):
     w_u_footing_weight = 1.2 * (footing_area * eval_t * 2.4)
-    w_u_soil_weight = 1.2 * W_soil # บวกรวมน้ำหนักดินถมสุทธิเป็นส่วนหนึ่งของ Dead Load คงที่ (Factored)
+    w_u_soil_weight = 1.2 * W_soil 
     
     P_total_factored = P_ultimate + w_u_footing_weight + w_u_soil_weight
+    # ... (โค้ดเดิมด้านในฟังก์ชัน) ...
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
