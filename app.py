@@ -40,7 +40,7 @@ def initialize_thai_font_system():
 current_thai_font = initialize_thai_font_system()
 
 st.title("📐 Enterprise Footing Suite (V7.3 - Fixed Triangular Manual Input)")
-st.markdown("### ระบบวิเคราะห์ฐานราก: แก้ไขระบบกำหนดขนาดฐานรากสามเหลี่ยมแบบแมนนวลและตรวจสอบระยะขอบเซฟตี้")
+st.markdown("### Footing Analysis System: Fixed Manual Triangular Dimensioning and Edge Safety Check")
 st.markdown("---")
 
 def point_to_segment_dist(px, py, x1, y1, x2, y2):
@@ -54,28 +54,28 @@ def point_to_segment_dist(px, py, x1, y1, x2, y2):
 # SIDEBAR CONTROL INTERFACE
 # =========================================================================
 with st.sidebar:
-    st.header("🏗️ ข้อกำหนดสถิตศาสตร์และวัสดุ")
+    st.header("🏗️ Statics and Material Specifications")
     footing_shape_type = st.selectbox(
-        "รูปทรงเรขาคณิตของฐานราก:", 
-        ["ฐานรากสามเหลี่ยมตัดมุม (Truncated Triangular)", "ฐานรากสี่เหลี่ยม (Rectangular Footing)"],
+        "Footing Geometry Shape:", 
+        ["Truncated Triangular Footing", "Rectangular Footing"],
         index=0
     )
     
-    st.subheader("1. คุณสมบัติเสาเข็มและการรับน้ำหนัก")
-    if footing_shape_type == "ฐานรากสามเหลี่ยมตัดมุม (Truncated Triangular)":
+    st.subheader("1. Pile Properties and Load Capacity")
+    if footing_shape_type == "Truncated Triangular Footing":
         n_piles = 3
     else:
-        n_piles = st.selectbox("จำนวนเสาเข็มในกลุ่ม:", [2, 3, 4, 5, 6, 8, 9], index=2)
+        n_piles = st.selectbox("Number of Piles in Group:", [2, 3, 4, 5, 6, 8, 9], index=2)
         
-    pile_size = st.number_input("ขนาดหน้าตัดเสาเข็ม (เมตร)", value=0.30, min_value=0.15, step=0.05)
-    pile_cap = st.number_input("กำลังรับแรงอัดปลอดภัยเสาเข็ม (ตัน/ต้น)", value=30.0, min_value=1.0)
-    pile_tension_cap = st.number_input("กำลังรับแรงถอนปลอดภัยเสาเข็ม (ตัน/ต้น)", value=10.0, min_value=0.0)
+    pile_size = st.number_input("Pile Cross-Section Size (m)", value=0.30, min_value=0.15, step=0.05)
+    pile_cap = st.number_input("Safe Pile Compressive Capacity (tons/pile)", value=30.0, min_value=1.0)
+    pile_tension_cap = st.number_input("Safe Pile Uplift Capacity (tons/pile)", value=10.0, min_value=0.0)
     
     S_dist = 3.0 * pile_size
     E_dist = max(pile_size, 0.35)
 
-    # คำนวณหาขอบเขตต่ำสุดทางเรขาคณิต (Geometric Minimum Limit)
-    if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
+    # Calculate Geometric Minimum Limit
+    if footing_shape_type == "Rectangular Footing":
         if n_piles == 2: piles_ideal = [(-S_dist/2, 0), (S_dist/2, 0)]
         elif n_piles == 3: piles_ideal = [(-S_dist, 0), (0, 0), (S_dist, 0)]
         elif n_piles == 4: piles_ideal = [(-S_dist/2, -S_dist/2), (S_dist/2, -S_dist/2), (-S_dist/2, S_dist/2), (S_dist/2, S_dist/2)]
@@ -88,7 +88,7 @@ with st.sidebar:
         L_min_geometry = (max(p[1] for p in piles_ideal) - min(p[1] for p in piles_ideal)) + 2 * E_dist
     else:
         piles_ideal = [(0, S_dist / math.sqrt(3)), (-S_dist / 2, -S_dist / (2 * math.sqrt(3))), (S_dist / 2, -S_dist / (2 * math.sqrt(3)))]
-        # คำนวณระยะมิติขั้นต่ำของขอบคอนกรีตสามเหลี่ยมตัดมุม
+        # Calculate minimum dimensions for truncated triangular edge
         y_p1, y_p23 = S_dist / math.sqrt(3), -S_dist / (2 * math.sqrt(3))
         v1_t = (-E_dist / math.sqrt(3), y_p1 + E_dist)
         v2_t = (E_dist / math.sqrt(3), y_p1 + E_dist)
@@ -100,49 +100,49 @@ with st.sidebar:
         B_min_geometry = max(v[0] for v in base_v_temp) - min(v[0] for v in base_v_temp)
         L_min_geometry = max(v[1] for v in base_v_temp) - min(v[1] for v in base_v_temp)
 
-    st.subheader("2. กำหนดขนาดมิติรูปทรงฐานราก (B x L)")
-    dim_mode = st.radio("ระเบียบวิธีหาขนาดกว้าง-ยาว:", ["คำนวณอัตโนมัติ (Auto-Size)", "กำหนดขนาดเอง (Manual Override)"])
+    st.subheader("2. Define Footing Dimensions (B x L)")
+    dim_mode = st.radio("Dimensioning Method:", ["Auto-Size", "Manual Override"])
     
-    # แก้ไขตรรกะตรงนี้: ปลดล็อคเงื่อนไขเพื่อให้ฐานรากทุกประเภทแสดงช่องกรอกขนาด Manual Override ได้
-    if dim_mode == "กำหนดขนาดเอง (Manual Override)":
-        st.caption(f"⚠️ เกณฑ์มิติขั้นต่ำตามพิกัดเสาเข็ม: B ≥ {B_min_geometry:.2f} ม. | L ≥ {L_min_geometry:.2f} ม.")
-        B_input = st.number_input("ระบุความกว้างรวมแกน X (B, เมตร)", value=float(round(B_min_geometry, 2)), min_value=0.4, step=0.05)
-        L_input = st.number_input("ระบุความยาวรวมแกน Y (L, เมตร)", value=float(round(L_min_geometry, 2)), min_value=0.4, step=0.05)
+    # Allows manual override for all footing types
+    if dim_mode == "Manual Override":
+        st.caption(f"⚠️ Minimum Geometric Limits based on Pile Coordinates: B ≥ {B_min_geometry:.2f} m | L ≥ {L_min_geometry:.2f} m")
+        B_input = st.number_input("Specify Total Width on X-axis (B, meters)", value=float(round(B_min_geometry, 2)), min_value=0.4, step=0.05)
+        L_input = st.number_input("Specify Total Length on Y-axis (L, meters)", value=float(round(L_min_geometry, 2)), min_value=0.4, step=0.05)
         
         B_ft = max(B_input, B_min_geometry)
         L_ft = max(L_input, L_min_geometry)
         
         if B_input < B_min_geometry or L_input < L_min_geometry:
-            st.error("🚨 ขนาดที่ระบุเล็กกว่าระยะศูนย์กลางเข็ม + ระยะขอบ! ระบบได้ปรับเข้าสู่ค่าขั้นต่ำเพื่อความปลอดภัย")
+            st.error("🚨 Specified dimensions are smaller than pile centers + edge distance! The system has adjusted to minimum values for safety.")
     else:
         B_ft = B_min_geometry
         L_ft = L_min_geometry
 
-    st.subheader("3. น้ำหนักบรรทุกใช้งาน & ดินถม")
-    DL = st.number_input("Dead Load (ตัน)", value=55.0, min_value=0.0)
-    LL = st.number_input("Live Load (ตัน)", value=30.0, min_value=0.0)
-    Mcx = st.number_input("โมเมนต์ M_cx (ตัน-เมตร)", value=10.0)
-    Mcy = st.number_input("โมเมนต์ M_cy (ตัน-เมตร)", value=8.0)
-    soil_depth = st.number_input("ความลึกของดินถม (m)", value=1.0, min_value=0.0, step=0.1)
-    soil_density = st.number_input("ความหนาแน่นของดิน (t/m³)", value=1.8, min_value=1.0, step=0.1)
+    st.subheader("3. Service Loads & Soil Backfill")
+    DL = st.number_input("Dead Load (tons)", value=55.0, min_value=0.0)
+    LL = st.number_input("Live Load (tons)", value=30.0, min_value=0.0)
+    Mcx = st.number_input("Moment M_cx (ton-m)", value=10.0)
+    Mcy = st.number_input("Moment M_cy (ton-m)", value=8.0)
+    soil_depth = st.number_input("Soil Backfill Depth (m)", value=1.0, min_value=0.0, step=0.1)
+    soil_density = st.number_input("Soil Density (t/m³)", value=1.8, min_value=1.0, step=0.1)
     
-    st.subheader("4. หน้าตัดตอม่อและกำลังวัสดุ")
-    cx = st.number_input("ความกว้างตอม่อแกน X (เมตร)", value=0.35, min_value=0.15, step=0.05)
-    cy = st.number_input("ความกว้างตอม่อแกน Y (เมตร)", value=0.35, min_value=0.15, step=0.05)
-    col_position = st.selectbox("ตำแหน่งเชิงพิกัดของตอม่อ:", ["เสาภายใน (Interior)", "เสาขอบ (Edge)", "เสามุม (Corner)"])
-    fc_prime = st.number_input("กำลังอัดประลัย fc' (ksc)", value=280, min_value=150, step=10)
-    fy = st.selectbox("กำลังครากเหล็กเสริมหลัก fy (ksc)", [4000, 5000], index=0)
-    bar_dia = st.selectbox("ขนาดเหล็กแกนหลัก (มม.)", [12, 16, 20, 25, 28, 32], index=2)
+    st.subheader("4. Column Section and Material Strengths")
+    cx = st.number_input("Column Width X-axis (meters)", value=0.35, min_value=0.15, step=0.05)
+    cy = st.number_input("Column Width Y-axis (meters)", value=0.35, min_value=0.15, step=0.05)
+    col_position = st.selectbox("Column Position:", ["Interior", "Edge", "Corner"])
+    fc_prime = st.number_input("Ultimate Compressive Strength fc' (ksc)", value=280, min_value=150, step=10)
+    fy = st.selectbox("Main Rebar Yield Strength fy (ksc)", [4000, 5000], index=0)
+    bar_dia = st.selectbox("Main Rebar Size (mm)", [12, 16, 20, 25, 28, 32], index=2)
     
-    st.subheader("5. ความหนาและระยะหุ้ม")
-    thickness_mode = st.radio("ระเบียบวิธีหาความหนา:", ["คำนวณอัตโนมัติ (Auto-Optimize)", "กำหนดความหนาเอง (Manual Override)"])
+    st.subheader("5. Thickness and Concrete Cover")
+    thickness_mode = st.radio("Thickness Determination Method:", ["Auto-Optimize", "Manual Override"])
     manual_t = 0.65
-    if thickness_mode == "กำหนดความหนาเอง (Manual Override)":
-        manual_t_cm = st.number_input("ระบุความหนาฐานราก t (ซม.)", min_value=30, max_value=300, value=65, step=5)
+    if thickness_mode == "Manual Override":
+        manual_t_cm = st.number_input("Specify Footing Thickness t (cm)", min_value=30, max_value=300, value=65, step=5)
         manual_t = manual_t_cm / 100
         
-    pile_embed_cm = st.number_input("ระยะเข็มฝังในฐาน (cm)", value=5.0, min_value=0.0, step=1.0)
-    concrete_cover_cm = st.number_input("ระยะหุ้มคอนกรีตสุทธิ (cm)", value=7.5, min_value=3.0, step=0.5)
+    pile_embed_cm = st.number_input("Pile Embedment Depth (cm)", value=5.0, min_value=0.0, step=1.0)
+    concrete_cover_cm = st.number_input("Net Concrete Cover (cm)", value=7.5, min_value=3.0, step=0.5)
 
 phi_shear, phi_flexure = 0.75, 0.90
 ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
@@ -150,8 +150,8 @@ ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 # =========================================================================
 # AS-BUILT FIELD SURVEY DATA EDITOR
 # =========================================================================
-st.markdown("### 📍 1. ข้อมูลสำรวจเสาเข็มหนีศูนย์หน้างานจริง (As-Built Field Survey Analysis)")
-st.info("💡 **การเชื่อมโยงข้อมูล:** ตารางนี้จะส่งผลต่อรูปแปลนวิศวกรรมด้านล่างโดยตรง")
+st.markdown("### 📍 1. As-Built Field Survey Analysis")
+st.info("💡 **Data Linkage:** This table directly affects the engineering blueprint below.")
 
 df_initial = pd.DataFrame({
     'Pile Name': [f"P{i+1}" for i in range(n_piles)],
@@ -183,14 +183,14 @@ average_load_factor = P_ultimate / P_service if P_service > 0 else 1.45
 Mu_cx = Mcx * average_load_factor
 Mu_cy = Mcy * average_load_factor
 
-# --- คำนวณพิกัดมุมคอนกรีตฐานรากตามสเกลที่กำหนดจริง ---
-if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
+# --- Calculate footing concrete corner coordinates based on true scale ---
+if footing_shape_type == "Rectangular Footing":
     footing_area = B_ft * L_ft
     x_max_edge, x_min_edge = B_ft / 2, -B_ft / 2
     y_max_edge, y_min_edge = L_ft / 2, -L_ft / 2
     concrete_vertices = [(x_min_edge, y_min_edge), (x_max_edge, y_min_edge), (x_max_edge, y_max_edge), (x_min_edge, y_max_edge)]
 else:
-    # คำนวณรูปแบบสามเหลี่ยมตัดมุมขั้นต่ำ (Base Geometry)
+    # Calculate minimal truncated triangle shape (Base Geometry)
     y_p1, y_p23 = S_dist / math.sqrt(3), -S_dist / (2 * math.sqrt(3))
     v1_tri = (-E_dist / math.sqrt(3), y_p1 + E_dist)
     v2_tri = (E_dist / math.sqrt(3), y_p1 + E_dist)
@@ -200,28 +200,28 @@ else:
     v6_tri = (-S_dist / 2 - 2 * E_dist / math.sqrt(3), y_p23)
     base_vertices = [v1_tri, v2_tri, v3_tri, v4_tri, v5_tri, v6_tri]
     
-    # หาอัตราส่วนการขยายขนาดจากศูนย์กลางเสา (0,0) ในกรณีที่ผู้ใช้สั่ง Manual Override
+    # Find scale ratio from column center (0,0) in case user overrides dimensions
     B_base = max(v[0] for v in base_vertices) - min(v[0] for v in base_vertices)
     L_base = max(v[1] for v in base_vertices) - min(v[1] for v in base_vertices)
     
     scale_x = B_ft / B_base if B_base > 0 else 1.0
     scale_y = L_ft / L_base if L_base > 0 else 1.0
     
-    # แมปพิกัดคอนกรีตขยายตัวออกตามสเกลผู้ใช้งาน
+    # Map scaled concrete coordinates
     concrete_vertices = [(v[0] * scale_x, v[1] * scale_y) for v in base_vertices]
     
-    # คำนวณเนื้อที่คอนกรีตหลังการปรับสเกลจริง
+    # Calculate true scaled concrete area
     base_area = (math.sqrt(3)/4)*(S_dist**2) + (3*S_dist*E_dist) + (2*math.sqrt(3)*(E_dist**2))
     footing_area = base_area * scale_x * scale_y
     
-    # อัปเดตขนาดจริงของหน้าตัด
+    # Update true dimension boundaries
     B_ft = max(v[0] for v in concrete_vertices) - min(v[0] for v in concrete_vertices)
     L_ft = max(v[1] for v in concrete_vertices) - min(v[1] for v in concrete_vertices)
 
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
-# ตรวจสอบระยะขอบเสาเข็มหน้างานจริง (As-Built Edge Distance Check)
+# As-Built Edge Distance Check
 net_min_edge_dist = float('inf')
 segments = [(concrete_vertices[i], concrete_vertices[(i+1)%len(concrete_vertices)]) for i in range(len(concrete_vertices))]
 for px, py in piles_actual:
@@ -230,14 +230,14 @@ for px, py in piles_actual:
     if current_min < net_min_edge_dist: net_min_edge_dist = current_min
 
 if net_min_edge_dist < 0.10:
-    st.error(f"🚨 **[As-Built Edge Distance Alert]** เสาเข็มหนีศูนย์จนเหลือระยะห่างผิวถึงขอบคอนกรีตเพียง {net_min_edge_dist*100:.1f} ซม. เสี่ยงคอนกรีตแตกแตกกระเทาะ!")
+    st.error(f"🚨 **[As-Built Edge Distance Alert]** Piles have deviated, leaving only {net_min_edge_dist*100:.1f} cm edge distance. Risk of concrete spalling!")
 
 def get_triangular_width_at_y(target_y):
-    if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)": return B_ft
+    if footing_shape_type == "Rectangular Footing": return B_ft
     y_coords_v = [v[1] for v in concrete_vertices]
     y_top_bound, y_bot_bound = max(y_coords_v), min(y_coords_v)
     if target_y > y_top_bound or target_y < y_bot_bound: return 0.0
-    # ประมาณการหาความกว้างหน้าตัดตามพิกัดแนวแกน Y ของสามเหลี่ยมที่ขยายสเกลแล้ว
+    # Estimate width on Y axis for scaled triangle
     x_max_at_y = max([v[0] for v in concrete_vertices if abs(v[1] - target_y) < 0.1], default=B_ft/2)
     return 2 * abs(x_max_at_y)
 
@@ -264,7 +264,7 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
     V_u_punching_kg = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_actual) if abs(px) > (cx/2 + eval_d/2) or abs(py) > (cy/2 + eval_d/2))
     v_u_punching_stress = V_u_punching_kg / A_punching_cm2 if A_punching_cm2 > 0 else 0.0
     beta_ratio = max(cx, cy) / min(cx, cy)
-    alpha_s = 40 if col_position == "เสาภายใน (Interior)" else (30 if col_position == "เสาขอบ (Edge)" else 20)
+    alpha_s = 40 if col_position == "Interior" else (30 if col_position == "Edge" else 20)
     v_c_allow_punching = phi_shear * min(0.27*(2 + 4/beta_ratio)*math.sqrt(fc_prime), 0.27*(alpha_s*(eval_d*100)/(b_0*100) + 2)*math.sqrt(fc_prime), 1.06*math.sqrt(fc_prime))
     
     cut_y_pos = cy/2 + eval_d
@@ -278,7 +278,7 @@ def execute_shear_evaluation_routine(eval_d, eval_t):
 def compute_effective_depth(t_total):
     return t_total - (concrete_cover_cm / 100) - (pile_embed_cm / 100) - ((bar_dia / 1000) / 2)
 
-if thickness_mode == "คำนวณอัตโนมัติ (Auto-Optimize)":
+if thickness_mode == "Auto-Optimize":
     d_opt = 0.30
     step_safe = False
     p_ult_out = [0.0] * n_piles
@@ -307,7 +307,7 @@ for prx, pry in piles_relative:
     pile_service_reactions.append(R_s)
 
 # FLEXURAL REBAR DESIGN
-if footing_shape_type == "ฐานรากสี่เหลี่ยม (Rectangular Footing)":
+if footing_shape_type == "Rectangular Footing":
     Mu_x_face = max(abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2)),
                     abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2)))
     w_flex_x = B_ft * 100
@@ -346,27 +346,27 @@ is_structure_crashed = crash_fx or crash_fy or (not step_safe)
 # =========================================================================
 # DIAGNOSTICS & ADVISORY REPORT
 # =========================================================================
-st.markdown("### 🔍 2. รายงานสถานะสุขภาพโครงสร้างและมิติขั้นต่ำ")
+st.markdown("### 🔍 2. Structural Health and Minimum Dimensions Report")
 col_adv1, col_adv2 = st.columns(2)
 with col_adv1:
-    st.write(f"**📐 ตรวจสอบขนาดฐานรากเรขาคณิตขั้นต่ำ (Geometric Check):**")
-    st.write(f"* มิติวิเคราะห์ที่ใช้งานจริง: **{B_ft:.2f} x {L_ft:.2f} เมตร**")
-    st.success(f"✅ ขนาดใช้งานผ่านเกณฑ์มิติขั้นต่ำเชิงเรขาคณิตปลอดภัย ($B \\ge {B_min_geometry:.2f}$ ม., $L \\ge {L_min_geometry:.2f}$ ม.)")
+    st.write(f"**📐 Minimum Geometric Footing Size Check:**")
+    st.write(f"* Actual Dimensions Used: **{B_ft:.2f} x {L_ft:.2f} meters**")
+    st.success(f"✅ Dimensions pass safety minimums ($B \\ge {B_min_geometry:.2f}$ m, $L \\ge {L_min_geometry:.2f}$ m)")
 
 with col_adv2:
     if not step_safe:
-        st.error("🚨 **สถานะแรงเฉือน:** ไม่ผ่านเกณฑ์! หน้าตัดแคบหรือบางเกินไปจนรับหน่วยแรงเฉือนทะลุไม่ได้")
+        st.error("🚨 **Shear Status:** Failed! Section is too narrow or thin to resist punching shear.")
     else:
-        st.success("✅ **สถานะแรงเฉือน:** ผ่านเกณฑ์หน่วยแรงเฉือนตอม่อทั้งหมด")
+        st.success("✅ **Shear Status:** Passed all column shear stress checks.")
 
 # =========================================================================
 # 2D ENGINEERING BLUEPRINT WITH DIMENSION LINES
 # =========================================================================
 if not is_structure_crashed:
-    st.markdown("### 📊 3. แบบวิศวกรรมสถาปัตยกรรมฐานราก (2D Engineering Blueprint)")
+    st.markdown("### 📊 3. 2D Engineering Blueprint")
     fig, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(14, 6))
     
-    # แปลน (Top View)
+    # Top View Plan
     footing_shape_patch = patches.Polygon(concrete_vertices, closed=True, linewidth=2.5, edgecolor='#2c3e50', facecolor='#eaeded', zorder=1)
     ax_plan.add_patch(footing_shape_patch)
     
@@ -393,14 +393,14 @@ if not is_structure_crashed:
             ax_plan.plot([ix, px], [iy, py], color='#e74c3c', linestyle='-', linewidth=1.8, zorder=4)
             ax_plan.scatter(ix, iy, color='#e74c3c', marker='.', s=40, zorder=4)
             
-    # --- 📐 ระบบเส้นบอกขนาดไดนามิก (Dimension Lines) รองรับทุกรูปทรง ---
-    # เส้นบอกขนาดแกน X (ความกว้างรวมทั้งหมดด้านล่างแผ่น)
+    # --- 📐 Dynamic Dimension Lines System ---
+    # X-Axis Dimensions (Total width at the bottom)
     dim_y = min(y_coords) - 0.25
     ax_plan.annotate('', xy=(min(x_coords), dim_y), xytext=(max(x_coords), dim_y),
                      arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=1.5))
     ax_plan.text(0, dim_y - 0.12, f"B (Total Width) = {B_ft:.2f} m", ha='center', va='center', color='#2c3e50', fontweight='bold', fontsize=10)
     
-    # เส้นบอกขนาดแกน Y (ความยาวรวมทั้งหมดด้านซ้ายแผ่น)
+    # Y-Axis Dimensions (Total length on the left)
     dim_x = min(x_coords) - 0.25
     ax_plan.annotate('', xy=(dim_x, min(y_coords)), xytext=(dim_x, max(y_coords)),
                      arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=1.5))
@@ -413,9 +413,9 @@ if not is_structure_crashed:
     ax_plan.set_aspect('equal')
     ax_plan.grid(True, linestyle=':', alpha=0.6)
     ax_plan.legend(loc="upper right", fontsize=8)
-    ax_plan.set_title(f"แปลนแสดงมิติทรงคอนกรีตจริง {B_ft:.2f} x {L_ft:.2f} ม. (Top View)", fontsize=11, fontweight='bold')
+    ax_plan.set_title(f"Plan showing actual concrete dimensions {B_ft:.2f} x {L_ft:.2f} m (Top View)", fontsize=11, fontweight='bold')
     
-    # รูปตัด (Section View)
+    # Section View
     sec_w = B_ft
     ax_sec.add_patch(patches.Rectangle((-sec_w/2, 0), sec_w, t_actual, linewidth=2, edgecolor='#2c3e50', facecolor='#f2f4f4', zorder=2))
     
@@ -441,10 +441,10 @@ if not is_structure_crashed:
     ax_sec.annotate('', xy=(sec_w/2 + 0.1, 0), xytext=(sec_w/2 + 0.1, t_actual), arrowprops=dict(arrowstyle='<->', color='#2c3e50'))
     ax_sec.text(sec_w/2 + 0.15, t_actual/2, f"t = {t_actual*100:.0f} cm", va='center', ha='left', fontweight='bold', fontsize=9)
 
-    blueprint_text = f"มิติฐานรากรวม: {B_ft:.2f} x {L_ft:.2f} m\n" \
+    blueprint_text = f"Total Footing Dimensions: {B_ft:.2f} x {L_ft:.2f} m\n" \
                      f"Effective Depth d = {d_actual*100:.1f} cm\n\n" \
-                     f"เหล็กแกน X: DB{bar_dia} @ {sp_main_x:.0f} cm ({n_main_bars_x} เส้น)\n" \
-                     f"เหล็กแกน Y: DB{bar_dia} @ {sp_main_y:.0f} cm ({n_main_bars_y} เส้น)"
+                     f"X-Axis Rebar: DB{bar_dia} @ {sp_main_x:.0f} cm ({n_main_bars_x} bars)\n" \
+                     f"Y-Axis Rebar: DB{bar_dia} @ {sp_main_y:.0f} cm ({n_main_bars_y} bars)"
                      
     ax_sec.text(0, t_actual + 0.15, blueprint_text, ha='center', va='bottom', color='#2c3e50', fontsize=9, fontweight='bold', bbox=dict(boxstyle='round,pad=0.5', facecolor='#fcf3cf', alpha=0.5))
     
@@ -452,21 +452,21 @@ if not is_structure_crashed:
     ax_sec.set_ylim(-0.5, t_actual + 0.6)
     ax_sec.set_aspect('equal')
     ax_sec.axis('off')
-    ax_sec.set_title("รูปตัดแสดงความหนาและพิกัดการจัดเหล็กตะกร้า (Section View)", fontsize=11, fontweight='bold')
+    ax_sec.set_title("Section View showing thickness and rebar arrangement", fontsize=11, fontweight='bold')
     st.pyplot(fig)
 
 # =========================================================================
 # INTERACTIVE MULTI-TAB MATRIX OUTPUTS
 # =========================================================================
-tab1, tab2, tab3 = st.tabs(["📝 สรุปพิกัดความปลอดภัยสถิตศาสตร์", "🌐 แบบจำลองพิกัด 3D Solid Model Mesh", "📋 รายการคำนวณและหน่วยแรงเชิงเลข"])
+tab1, tab2, tab3 = st.tabs(["📝 Statics Safety Summary", "🌐 3D Solid Model Mesh", "📋 Calculations and Stress Values"])
 
 with tab1:
-    st.subheader("📋 บทสรุปมิติรูปทรงวิศวกรรมควบคุม")
+    st.subheader("📋 Engineering Dimensions Summary")
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    with col_m1: st.metric("ความกว้างรวมสูงสุด (B)", f"{B_ft:.2f} เมตร")
-    with col_m2: st.metric("ความยาวรวมสูงสุด (L)", f"{L_ft:.2f} เมตร")
-    with col_m3: st.metric("ความหนารวมฐานราก (t)", f"{t_actual*100:.1f} ซม.")
-    with col_m4: st.metric("เนื้อที่ผิวฐานรากจริง", f"{footing_area:.3f} ตร.ม.")
+    with col_m1: st.metric("Maximum Total Width (B)", f"{B_ft:.2f} m")
+    with col_m2: st.metric("Maximum Total Length (L)", f"{L_ft:.2f} m")
+    with col_m3: st.metric("Total Footing Thickness (t)", f"{t_actual*100:.1f} cm")
+    with col_m4: st.metric("Actual Footing Surface Area", f"{footing_area:.3f} sq.m")
 
 with tab2:
     st.subheader("🌐 Interactive 3D Solid Model Mesh (Parametric Structural View)")
@@ -491,17 +491,17 @@ with tab2:
         for v in vertices: fig.add_trace(go.Scatter3d(x=[v[0], v[0]], y=[v[1], v[1]], z=[z_start, z_end], mode='lines', line=dict(color=line_color, width=2), showlegend=False))
 
     fig_3d = go.Figure()
-    fig_3d.add_trace(create_3d_prism_trace(concrete_vertices, 0, t_actual, '#2ecc71', 0.6, 'ฐานรากคอนกรีต'))
+    fig_3d.add_trace(create_3d_prism_trace(concrete_vertices, 0, t_actual, '#2ecc71', 0.6, 'Concrete Footing'))
     draw_3d_wireframe_lines(fig_3d, concrete_vertices, 0, t_actual, '#1e8449')
 
     column_vertices = [(-cx/2, -cy/2), (cx/2, -cy/2), (cx/2, cy/2), (-cx/2, cy/2)]
-    fig_3d.add_trace(create_3d_prism_trace(column_vertices, t_actual, t_actual + 0.60, '#e74c3c', 0.85, 'เสาตอม่อ'))
+    fig_3d.add_trace(create_3d_prism_trace(column_vertices, t_actual, t_actual + 0.60, '#e74c3c', 0.85, 'Column'))
     draw_3d_wireframe_lines(fig_3d, column_vertices, t_actual, t_actual + 0.60, '#922b21')
 
     for idx, (px, py) in enumerate(piles_actual):
         segments_count = 8
         pile_nodes = [(px + (pile_size/2)*math.cos(s*2*math.pi/segments_count), py + (pile_size/2)*math.sin(s*2*math.pi/segments_count)) for s in range(segments_count)]
-        fig_3d.add_trace(create_3d_prism_trace(pile_nodes, -1.5, embed_m, '#34495e', 0.8, 'เสาเข็ม As-Built', show_legend=(idx == 0)))
+        fig_3d.add_trace(create_3d_prism_trace(pile_nodes, -1.5, embed_m, '#34495e', 0.8, 'As-Built Pile', show_legend=(idx == 0)))
         draw_3d_wireframe_lines(fig_3d, pile_nodes, -1.5, embed_m, '#2c3e50')
 
     fig_3d.update_layout(scene=dict(xaxis=dict(title='X (m)'), yaxis=dict(title='Y (m)'), zaxis=dict(title='Z (m)'), aspectmode='data'), margin=dict(l=0, r=0, b=0, t=30))
