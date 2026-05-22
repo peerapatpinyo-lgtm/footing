@@ -279,7 +279,6 @@ with st.sidebar:
     DL = st.number_input("Dead Load (tons)", value=55.0, min_value=0.0)
     LL = st.number_input("Live Load (tons)", value=30.0, min_value=0.0)
     
-    # [MODIFIED] แยก Dead/Live สำหรับโมเมนต์ เพื่อจัดทำ Load Combination ตามหลักวิศวกรรมสากล
     col_mom1, col_mom2 = st.columns(2)
     with col_mom1:
         Mcx_dl = st.number_input("Moment M_cx Dead (t-m)", value=6.0)
@@ -340,7 +339,6 @@ piles_relative = [(p[0] - cg_actual_x, p[1] - cg_actual_y) for p in piles_actual
 I_yy_group = sum(p[0]**2 for p in piles_relative)
 I_xx_group = sum(p[1]**2 for p in piles_relative)
 
-# [MODIFIED] คำนวณตามมาตรฐานวิศวกรรมโครงสร้างจริง ไม่ใช่การคูณสุ่มตัวคูณเฉลี่ย
 P_service = DL + LL
 P_ultimate = (1.2 * DL) + (1.6 * LL)
 Mu_cx = (1.2 * Mcx_dl) + (1.6 * Mcx_ll)
@@ -418,9 +416,6 @@ for prx, pry in piles_relative:
 # =========================================================================
 # FLEXURAL FACE MOMENT ANALYSIS (GOVERNING CRITICAL SECTIONS)
 # =========================================================================
-# [MODIFIED] แก้ไขระบบคำนวณหน้าตัดวิกฤตดัดใหม่ทั้งหมดเพื่อรองรับแรงดัดสองแกนของฐานรากสามเหลี่ยม
-
-# 1. การดัดรอบแกน X (เหล็กเสริมแนวตั้ง / แกน Y) - แบ่งคิดฝั่งบนและฝั่งล่างตอม่อ
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 Mu_x_bot = abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
 w_flex_x_top = max(30.0, get_polygon_section_width_at_y(cy/2, concrete_vertices) * 100)
@@ -429,13 +424,11 @@ w_flex_x_bot = max(30.0, get_polygon_section_width_at_y(-cy/2, concrete_vertices
 n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top = design_rebar_by_axis(Mu_x_top, w_flex_x_top, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot = design_rebar_by_axis(Mu_x_bot, w_flex_x_bot, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
-# ควบคุมด้วยฝั่งที่ให้เนื้อที่เหล็กเสริมมากที่สุด (Worst Case Side)
 if As_req_x_top >= As_req_x_bot:
     Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_top, w_flex_x_top, n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top
 else:
     Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_bot, w_flex_x_bot, n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot
 
-# 2. การดัดรอบแกน Y (เหล็กเสริมแนวนอน / แกน X) - แบ่งคิดฝั่งซ้ายและฝั่งขวาตอม่อ (แก้ไขเคสสามเหลี่ยมไม่เป็นศูนย์แล้ว!)
 Mu_y_right = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
 Mu_y_left = abs(sum(p_ult_out[i] * (-cx/2 - p[0]) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
 w_flex_y_right = max(30.0, get_polygon_section_length_at_x(cx/2, concrete_vertices) * 100)
@@ -451,7 +444,6 @@ else:
 
 is_structure_crashed = crash_fx or crash_fy or (not step_safe)
 
-# Critical Metric Vars
 b1_box, b2_box = cx + d_actual, cy + d_actual
 b_0_len = 2 * (b1_box + b2_box)
 cut_y_pos = cy/2 + d_actual
@@ -463,6 +455,13 @@ Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_ac
 pile_ur = max(pile_service_reactions) / pile_cap if pile_cap > 0 else 1.0
 punching_ur = v_up / v_cp if v_cp > 0 else 1.0
 wide_beam_ur = v_uwb / v_cwb if v_cwb > 0 else 1.0
+
+# =========================================================================
+# DECLARE CRITICAL COUPLING LOGIC VARIABLES (PREVENT NAMEERROR)
+# =========================================================================
+P_u_total = P_ultimate + 1.2 * (w_s_footing + W_soil)
+Mu_x_total = Mu_cx + (P_u_total * (-ecc_y))
+Mu_y_total = Mu_cy + (P_u_total * (-ecc_x))
 
 # -------------------------------------------------------------------------
 # STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
@@ -543,9 +542,9 @@ st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} 
 st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
 
 if v_up <= v_cp: 
-    st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_up:.2f} $\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
+    st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_up:.2f} $\\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
 else: 
-    st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc). Footing thickness must be increased!")
+    st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc). Footing thickness must be increased!")
 
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
@@ -554,9 +553,9 @@ st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\t
 st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
 
 if v_uwb <= v_cwb: 
-    st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_uwb:.2f} $\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
+    st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_uwb:.2f} $\\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
 else: 
-    st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc). One-way shear structural failure risk detected!")
+    st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc). One-way shear structural failure risk detected!")
 
 st.markdown("---")
 
@@ -588,3 +587,23 @@ if available_length_x >= l_d_required:
     st.success(f"✅ **Pass:** Available embedment length ({available_length_x:.1f} cm) exceeds required development length ({l_d_required:.1f} cm). Straight bar extensions are structurally sufficient.")
 else:
     st.warning(f"⚠️ **Warning:** Insufficient embedment length ({available_length_x:.1f} cm < {l_d_required:.1f} cm). **Standard 90-degree hooks must be detailed** at both bar ends to ensure tension anchor compliance.")
+
+# -------------------------------------------------------------------------
+# STEP 6: 3D STRUCTURAL MESH VISUALIZATION
+# -------------------------------------------------------------------------
+st.markdown("---")
+st.markdown("### 🗺️ Step 6: 3D Interactive Mesh Visualization")
+st.markdown("This 3D structural twin illustrates the true spatial boundaries of the footing, the loading column, and the field as-built pile configurations.")
+
+fig_3d = generate_3d_mesh(
+    tuple(concrete_vertices), 
+    t_actual, 
+    cx, 
+    cy, 
+    tuple(piles_actual), 
+    pile_shape, 
+    pile_w, 
+    pile_l, 
+    pile_embed_cm / 100
+)
+st.plotly_chart(fig_3d, use_container_width=True)
