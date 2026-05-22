@@ -550,9 +550,17 @@ with tab3:
     st.markdown("### 📐 Step 1: Effective Depth Calculation ($d$)")
     st.markdown("The effective depth is calculated by subtracting concrete cover, pile embedment depth, and half of the main rebar diameter from the total thickness.")
     
-    # Safely rendering values assuming variables are available globally
-    st.markdown(rf"$$\text{{Governing Equation: }} d = t_{\text{{footing}}} - \text{{Cover}} - \text{{Embedment}} - \frac{{\emptyset_{\text{{bar}}}}结构}}{{2}}$$")
-    st.markdown(rf"$$\text{{Substitution: }} d = {d_actual + (concrete_cover_cm/100) + (pile_embed_cm/100 if 'pile_embed_cm' in locals() else 0.1):.3f}\text{{ m}} - {concrete_cover_cm/100:.3f}\text{{ m}} - {(pile_embed_cm/100 if 'pile_embed_cm' in locals() else 0.1):.3f}\text{{ m}} - \frac{{{bar_dia/1000:.3f}\text{{ m}}}}{{2}} = \mathbf{{{d_actual:.3f}}}\text{{ m}}$$")
+    # 1. Pure LaTeX formula using 'r' string (NO 'f' to avoid curly brace parsing errors)
+    st.markdown(r"$$\text{Governing Equation: } d = t_{\text{footing}} - \text{Cover} - \text{Embedment} - \frac{\emptyset_{\text{bar}}}{2}$$")
+    
+    # Pre-calculate meter conversions to keep the Streamlit f-string clean
+    cover_m = concrete_cover_cm / 100
+    embed_m = pile_embed_cm / 100 if 'pile_embed_cm' in locals() else 0.1
+    bar_m = bar_dia / 1000
+    t_footing_m = d_actual + cover_m + embed_m
+    
+    # 2. Substitution line using standard 'f' string with double backslashes for LaTeX
+    st.markdown(f"$$\\text{{Substitution: }} d = {t_footing_m:.3f}\\text{{ m}} - {cover_m:.3f}\\text{{ m}} - {embed_m:.3f}\\text{{ m}} - \\frac{{{bar_m:.3f}\\text{{ m}}}}{{2}} = \\mathbf{{{d_actual:.3f}}}\\text{{ m}}$$")
     
     st.markdown("---")
     
