@@ -411,13 +411,12 @@ with col_p2:
         alphahull=0, color='#2ecc71', opacity=0.4, name='ฐานรากคอนกรีต'
     ))
     
-    # ปักหมุดตำแหน่งเสาเข็มลงในพิกัดแกนแซดสามมิติ
     fig_3d.add_trace(go.Scatter3d(
         x=[p[0] for p in piles_list],
         y=[p[1] for p in piles_list],
         z=[0]*n_piles,
         mode='markers+text',
-        marker=dict(size=10, color='#34495e', symbol='cylinder'),
+        marker=dict(size=10, color='#34495e', symbol='circle'), # ✅ เปลี่ยนเป็น 'circle'
         text=[f"P{i+1}" for i in range(n_piles)],
         name='เสาเข็มหน้างานจริง'
     ))
