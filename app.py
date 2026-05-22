@@ -414,7 +414,8 @@ edited_df = st.data_editor(df_initial, disabled=['ชื่อเข็ม', 'Id
 # คำนวณพิกัดAs-Built
 piles_actual = []
 for _, row in edited_df.iterrows():
-    piles_actual.append((row['Ideal X (ม.)'] + row['ΔX (ม.) - หน้างาน'], row['Ideal Y (ม.)'] + row['ΔY (m.) - หน้างาน']))
+    # 🔥 FIXED: แก้ไขตัวอักษร 'm.' เป็น 'ม.' เรียบร้อยแล้ว หมดปัญหา KeyError
+    piles_actual.append((row['Ideal X (ม.)'] + row['ΔX (ม.) - หน้างาน'], row['Ideal Y (ม.)'] + row['ΔY (ม.) - หน้างาน']))
 
 # หา CG ของกลุ่มเข็มจริง
 cg_actual_x = sum(p[0] for p in piles_actual) / n_piles
@@ -479,10 +480,10 @@ st.markdown("### 🏗️ 2-5 ข้อมูล substitutions และควา
 col_res1, col_res2 = st.columns(2)
 with col_res1:
     st.write("**Factored Loads**")
-    st.write(f"* $P_{{u, total}}$: `{P_u_total:.2f}` ตัน")
-    st.write("**Shear Check (d = {d_actual:.2f} m)**")
-    st.write(f"* $v_{{up}}$: `{v_up:.2f}` KSC (≤ ${v_cp:.2f}$ KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
-    st.write(f"* $v_{{uwb}}$: `{v_uwb:.2f}` KSC (≤ ${v_cwb:.2f}$ KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
+    st.write(f"* P_u_total: `{P_u_total:.2f}` ตัน")
+    st.write(f"**Shear Check (d = {d_actual:.2f} m)**")
+    st.write(f"* v_up: `{v_up:.2f}` KSC (≤ {v_cp:.2f} KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
+    st.write(f"* v_uwb: `{v_uwb:.2f}` KSC (≤ {v_cwb:.2f} KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
 
 with col_res2:
     st.write("**Pile Reactions (Factored loads)**")
