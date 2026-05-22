@@ -101,6 +101,25 @@ def get_polygon_section_width_at_y(target_y, vertices):
     if len(intersections) < 2: return 0.1
     return max(intersections) - min(intersections)
 
+def get_polygon_section_height_at_x(target_x, vertices):
+    """หาความยาวหน้าตัดคอนกรีตที่แกน X ใดๆ (สำหรับแกน Y)"""
+    intersections = []
+    n = len(vertices)
+    for i in range(n):
+        p1 = vertices[i]
+        p2 = vertices[(i + 1) % n]
+        x1, y1 = p1[0], p1[1]
+        x2, y2 = p2[0], p2[1]
+        if min(x1, x2) <= target_x <= max(x1, x2):
+            if abs(x2 - x1) > 1e-6:
+                t = (target_x - x1) / (x2 - x1)
+                y_interp = y1 + t * (y2 - y1)
+                intersections.append(y_interp)
+            else:
+                intersections.extend([y1, y2])
+    if len(intersections) < 2: return 0.1
+    return max(intersections) - min(intersections)
+
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
 
@@ -108,14 +127,15 @@ def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
 # NEW ADVANCED ADDITIONS: SERVICEABILITY CRACK CONTROL (GERGELY-LUTZ)
 # =========================================================================
 def evaluate_gergely_lutz_crack(Mu_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacing_cm):
-    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (ACI Gergely-Lutz)"""
+    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (ACI Gergely-Lutz) [SI Units]"""
     if Mu_ton_m <= 0 or As_cm2 <= 0: return 0.0
-    fs = (Mu_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) # Service Stress Approximation
+    fs = (Mu_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) # Service Stress Approximation (ksc)
     if fs > 0.6 * 4000: fs = 0.6 * 4000
     dc = cover_cm + (bar_mm / 20)
     A_eff = 2 * dc * (spacing_cm if spacing_cm > 0 else 15.0)
     beta = 1.20
-    w_crack = 11e-6 * beta * fs * (dc * A_eff)**(1/3)
+    # ACI SI equation outputting mm
+    w_crack = 11e-6 * beta * (fs * 0.09806) * (dc * A_eff * 1000)**(1/3)
     return w_crack
 
 # =========================================================================
@@ -433,7 +453,13 @@ df_initial = pd.DataFrame({
     'ΔX (ม.) - หน้างาน': [0.00] * n_piles,
     'ΔY (ม.) - หน้างาน': [0.00] * n_piles
 })
-edited_df = st.data_editor(df_initial, disabled=['ชื่อเข็ม', 'Ideal X (ม.)', 'Ideal Y (ม.)'], hide_index=True, use_container_width=True)
+edited_df = st.data_editor(
+    df_initial, 
+    disabled=['ชื่อเข็ม', 'Ideal X (ม.)', 'Ideal Y (ม.)'], 
+    hide_index=True, 
+    use_container_width=True,
+    key=f"piles_editor_{footing_shape_type}_{n_piles}"
+)
 
 piles_actual = []
 for _, row in edited_df.iterrows():
@@ -473,6 +499,11 @@ if thickness_mode == "Auto-Optimize":
         )
         if safe: break
         d_opt += 0.02
+        
+    if not safe:
+        st.error("❌ ไม่พบความหนาที่ปลอดภัย (Safe Thickness) ภายในข้อจำกัด 3.0 เมตร กรุณาตรวจสอบการรับน้ำหนักหรือปรับขนาดฐานราก")
+        st.stop()
+        
     t_actual = math.ceil(t_opt * 20) / 20; d_actual = d_opt
 else:
     t_actual = manual_t
@@ -509,13 +540,21 @@ for prx, pry in piles_relative:
 has_tension = any(r < 0 for r in p_ult_out)
 require_top_steel = has_tension or (t_actual >= 0.60) 
 
-# คำนวณโมเมนต์ดัดออกแบบเหล็กเสริมและขนาดรอยร้าว
+# คำนวณโมเมนต์ดัดออกแบบเหล็กเสริม (X-Axis)
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 Mu_x_bot = abs(sum(p_ult_out[i] * (abs(p[1]) - cy/2) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
 Mu_x_max = max(Mu_x_top, Mu_x_bot)
 
 w_flex_x = get_polygon_section_width_at_y(0, concrete_vertices) * 100
 n_bars_x, sp_x, _, as_req_x = design_rebar_by_axis(Mu_x_max, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+
+# คำนวณโมเมนต์ดัดออกแบบเหล็กเสริม (Y-Axis)
+Mu_y_top = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
+Mu_y_bot = abs(sum(p_ult_out[i] * (abs(p[0]) - cx/2) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
+Mu_y_max = max(Mu_y_top, Mu_y_bot)
+
+w_flex_y = get_polygon_section_height_at_x(0, concrete_vertices) * 100
+n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max, w_flex_y, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
 # ตรวจสอบขีดจำกัดรอยร้าวหน้าตัดวิกฤต (Crack Control Validation)
 calculated_w = evaluate_gergely_lutz_crack(Mu_x_max, n_bars_x * ab_area, d_actual*100, concrete_cover_cm, bar_dia, sp_x)
@@ -528,6 +567,16 @@ st.markdown("---")
 tab_report, tab_visuals = st.tabs(["📊 2. รายงานผลการวิเคราะห์ & Serviceability", "🗺️ 3. Engineering Visual Twin Plots (2D/3D)"])
 
 with tab_report:
+    # ------------------ ADDITION: TENSION SAFETY WARNING ------------------
+    tension_warnings = []
+    for idx, r_s in enumerate(pile_service_reactions):
+        if r_s < 0 and abs(r_s) > pile_tension_cap:
+            tension_warnings.append(f"P{idx+1} (แรงถอน {abs(r_s):.2f} ตัน)")
+            
+    if tension_warnings:
+        st.error(f"🚨 **อันตราย!** มีเสาเข็มรับแรงถอน (Tension) เกินค่าพิกัดปลอดภัยที่ตั้งไว้ ({pile_tension_cap} ตัน/ต้น): {', '.join(tension_warnings)}")
+    # ----------------------------------------------------------------------
+    
     col_res1, col_res2 = st.columns(2)
     with col_res1:
         st.write("**Factored Loads & Geometries**")
@@ -539,6 +588,11 @@ with tab_report:
             st.success("✅ Crack Width Control: Passed")
         else:
             st.error("❌ Crack Width Control: Exceeded ขอบเขตความกว้างรอยร้าวเกินมาตรฐานสำหรับสภาพแวดล้อมนี้")
+            
+        st.write(f"**Flexural Design (เหล็กเสริมรับโมเมนต์ดัด)**")
+        st.write(f"* แกน X (Mu_x = {Mu_x_max:.2f} t-m): ใช้ `{n_bars_x}-DB{bar_dia} @ {sp_x:.0f} cm`")
+        st.write(f"* แกน Y (Mu_y = {Mu_y_max:.2f} t-m): ใช้ `{n_bars_y}-DB{bar_dia} @ {sp_y:.0f} cm`")
+        
         st.write(f"**Shear Check (d = {d_actual:.2f} m)**")
         st.write(f"* v_up (Punching): `{v_up:.2f}` KSC (≤ {v_cp:.2f} KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
         st.write(f"* v_uwb (Wide-beam): `{v_uwb:.2f}` KSC (≤ {v_cwb:.2f} KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
@@ -568,6 +622,6 @@ with tab_visuals:
         fig_rebar = generate_rebar_detailing_view(t_actual, B_max_visual, concrete_cover_cm, pile_embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel)
         st.pyplot(fig_rebar)
 
-    st.markdown("#### 🧊 C) 3D Interactive Mesh (Exact Geometry Geometry)")
+    st.markdown("#### 🧊 C) 3D Interactive Mesh (Exact Geometry)")
     fig_3d = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100)
     st.plotly_chart(fig_3d, use_container_width=True)
