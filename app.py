@@ -145,7 +145,7 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
     ax.axvline(0, color='black', linewidth=0.5, linestyle='--')
     ax.set_xlabel('พิกัด X (ม.)')
     ax.set_ylabel('พิกัด Y (ม.)')
-    ax.set_title('แปลนAs-Built (2D Mapping)', fontsize=12, fontweight='bold')
+    ax.set_title('แปลน As-Built (2D Mapping)', fontsize=12, fontweight='bold')
     ax.axis('equal')
     ax.grid(True, linestyle=':', alpha=0.6)
     return fig
@@ -337,7 +337,7 @@ with st.sidebar:
     environmental_condition = st.selectbox("สภาวะการใช้งานควบคุมรอยร้าว:", ["ทั่วไป (สภาวะปกติ - Max 0.30mm)", "โครงสร้างกันน้ำ / กัดกร่อนสูง (Max 0.15mm)"])
     w_allowable = 0.15 if "โครงสร้างกันน้ำ" in environmental_condition else 0.30
 
-    st.subheader("1. การตั้งค่าเสาเข็มและพิกัดAs-Built")
+    st.subheader("1. การตั้งค่าเสาเข็มและพิกัด As-Built")
     pile_shape = st.selectbox("รูปทรงเสาเข็ม:", ["Circular Pile", "Square/Rectangular Pile"], index=0)
     pile_dia = st.number_input("เส้นผ่านศูนย์กลาง/ความกว้างเสาเข็ม (ม.)", value=0.30, min_value=0.15)
     pile_w = pile_dia; pile_l = pile_dia 
@@ -423,7 +423,7 @@ ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 # =========================================================================
 # MAIN DATA PROCESSING FLOW (FROM V7.9 INTEGRATED WITH ADVANCED FEATURES)
 # =========================================================================
-st.markdown("### 📍 1. การวิเคราะห์As-Built Field Survey เข็มตอม่อ")
+st.markdown("### 📍 1. การวิเคราะห์ As-Built Field Survey เข็มตอม่อ")
 st.info("💡 **ระบบวิเคราะห์ความปลอดภัยเชิงพิกัดร่วม:** โค้ดจะดักจับแรงเยื้องศูนย์จริงรวมกับผลของแรงแผ่นดินไหว/แรงลมแนวราบ")
 
 df_initial = pd.DataFrame({
@@ -520,55 +520,54 @@ n_bars_x, sp_x, _, as_req_x = design_rebar_by_axis(Mu_x_max, w_flex_x, d_actual*
 # ตรวจสอบขีดจำกัดรอยร้าวหน้าตัดวิกฤต (Crack Control Validation)
 calculated_w = evaluate_gergely_lutz_crack(Mu_x_max, n_bars_x * ab_area, d_actual*100, concrete_cover_cm, bar_dia, sp_x)
 
-# =========================================================================
-# DISPLAY & INTERFACE REPORT
-# =========================================================================
-st.markdown("### 🏗️ 2-5 ข้อมูลการวิเคราะห์ความปลอดภัยและความคงทน (Serviceability Report)")
-col_res1, col_res2 = st.columns(2)
-with col_res1:
-    st.write("**Factored Loads & Geometries**")
-    st.write(f"* พื้นที่หน้าตัดฐานรากประมวลผลจริง: `{footing_area:.2f}` ตร.ม.")
-    st.write(f"* P_u_total (รวมนน.ดิน+ฐานราก): `{P_u_total:.2f}` ตัน")
-    st.write(f"**สมรรถนะการควบคุมรอยร้าว & พฤติกรรมโครงสร้าง**")
-    st.write(f"* ความกว้างรอยร้าวผิวคอนกรีต: `{calculated_w:.3f}` มม. (ค่าขีดจำกัดยอมให้: `{w_allowable}` มม.)")
-    if calculated_w <= w_allowable:
-        st.success("✅ Crack Width Control: Passed")
-    else:
-        st.error("❌ Crack Width Control: Exceeded ขอบเขตความกว้างรอยร้าวเกินมาตรฐานสำหรับสภาพแวดล้อมนี้")
-    st.write(f"**Shear Check (d = {d_actual:.2f} m)**")
-    st.write(f"* v_up (Punching): `{v_up:.2f}` KSC (≤ {v_cp:.2f} KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
-    st.write(f"* v_uwb (Wide-beam): `{v_uwb:.2f}` KSC (≤ {v_cwb:.2f} KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
-
-with col_res2:
-    st.write("**ตารางสรุปผลแรงปฏิกิริยาหัวเสาเข็มรอบทิศทาง**")
-    df_react = pd.DataFrame({
-        'ชื่อเข็ม': df_initial['ชื่อเข็ม'], 
-        'R_u (ดิ่ง-ตัน)': p_ult_out,
-        'R_s (ดิ่งใช้งาน-ตัน)': pile_service_reactions,
-        'V_i (ราบแผ่นดินไหว-ตัน)': pile_horizontal_shear
-    })
-    st.dataframe(df_react.style.highlight_max(subset=['V_i (ราบแผ่นดินไหว-ตัน)'], color='#f5b041'), hide_index=True)
-
-# =========================================================================
-# STEP 6: DUAL VISUALIZATION (FROM V7.9 PERFECTLY MERGED)
-# =========================================================================
 st.markdown("---")
-st.markdown("### 🗺️ 6. Engineering Visual Twin Plots (V8.0 Ultimate Detailing)")
 
-col_plot1, col_plot2 = st.columns(2)
+# =========================================================================
+# DISPLAY & INTERFACE REPORT (REFACTORED WITH TABS)
+# =========================================================================
+tab_report, tab_visuals = st.tabs(["📊 2. รายงานผลการวิเคราะห์ & Serviceability", "🗺️ 3. Engineering Visual Twin Plots (2D/3D)"])
 
-with col_plot1:
-    st.markdown("#### 📐 A) As-Built Plan View (Polygon Based)")
-    fig_2d = generate_2d_plan_view(concrete_vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l, columns_list=columns_list)
-    st.pyplot(fig_2d)
+with tab_report:
+    col_res1, col_res2 = st.columns(2)
+    with col_res1:
+        st.write("**Factored Loads & Geometries**")
+        st.write(f"* พื้นที่หน้าตัดฐานรากประมวลผลจริง: `{footing_area:.2f}` ตร.ม.")
+        st.write(f"* P_u_total (รวมนน.ดิน+ฐานราก): `{P_u_total:.2f}` ตัน")
+        st.write(f"**สมรรถนะการควบคุมรอยร้าว & พฤติกรรมโครงสร้าง**")
+        st.write(f"* ความกว้างรอยร้าวผิวคอนกรีต: `{calculated_w:.3f}` มม. (ค่าขีดจำกัดยอมให้: `{w_allowable}` มม.)")
+        if calculated_w <= w_allowable:
+            st.success("✅ Crack Width Control: Passed")
+        else:
+            st.error("❌ Crack Width Control: Exceeded ขอบเขตความกว้างรอยร้าวเกินมาตรฐานสำหรับสภาพแวดล้อมนี้")
+        st.write(f"**Shear Check (d = {d_actual:.2f} m)**")
+        st.write(f"* v_up (Punching): `{v_up:.2f}` KSC (≤ {v_cp:.2f} KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
+        st.write(f"* v_uwb (Wide-beam): `{v_uwb:.2f}` KSC (≤ {v_cwb:.2f} KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
 
-with col_plot2:
-    st.markdown("#### 🟥 B) Ultra Section Detailing View")
-    if require_top_steel:
-        st.info(f"💡 **Top Rebar Activated:** {'เนื่องจากมีเข็มรับแรงถอน (Tension)' if has_tension else f'เนื่องจากฐานรากหนา t={t_actual:.2f}m ≥ 0.60m (กันร้าว)'}")
-    fig_rebar = generate_rebar_detailing_view(t_actual, B_max_visual, concrete_cover_cm, pile_embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel)
-    st.pyplot(fig_rebar)
+    with col_res2:
+        st.write("**ตารางสรุปผลแรงปฏิกิริยาหัวเสาเข็มรอบทิศทาง**")
+        df_react = pd.DataFrame({
+            'ชื่อเข็ม': df_initial['ชื่อเข็ม'], 
+            'R_u (ดิ่ง-ตัน)': p_ult_out,
+            'R_s (ดิ่งใช้งาน-ตัน)': pile_service_reactions,
+            'V_i (ราบแผ่นดินไหว-ตัน)': pile_horizontal_shear
+        })
+        st.dataframe(df_react.style.highlight_max(subset=['V_i (ราบแผ่นดินไหว-ตัน)'], color='#f5b041'), hide_index=True, use_container_width=True)
 
-st.markdown("#### 🧊 C) 3D Interactive Mesh (Exact Geometry Geometry)")
-fig_3d = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100)
-st.plotly_chart(fig_3d, use_container_width=True)
+with tab_visuals:
+    col_plot1, col_plot2 = st.columns(2)
+
+    with col_plot1:
+        st.markdown("#### 📐 A) As-Built Plan View (Polygon Based)")
+        fig_2d = generate_2d_plan_view(concrete_vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l, columns_list=columns_list)
+        st.pyplot(fig_2d)
+
+    with col_plot2:
+        st.markdown("#### 🟥 B) Ultra Section Detailing View")
+        if require_top_steel:
+            st.info(f"💡 **Top Rebar Activated:** {'เนื่องจากมีเข็มรับแรงถอน (Tension)' if has_tension else f'เนื่องจากฐานรากหนา t={t_actual:.2f}m ≥ 0.60m (กันร้าว)'}")
+        fig_rebar = generate_rebar_detailing_view(t_actual, B_max_visual, concrete_cover_cm, pile_embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel)
+        st.pyplot(fig_rebar)
+
+    st.markdown("#### 🧊 C) 3D Interactive Mesh (Exact Geometry Geometry)")
+    fig_3d = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100)
+    st.plotly_chart(fig_3d, use_container_width=True)
