@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V7.3", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V7.4", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -63,7 +63,7 @@ def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
 # =========================================================================
 # CORE ENGINEERING LOGIC (SEPARATION OF CONCERNS)
 # =========================================================================
-def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, phi_s, footing_shape, b_ft, vertices):
+def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, footing_shape, b_ft, vertices, phi_s=0.75):
     w_u_footing_weight = 1.2 * (area * eval_t * 2.4)
     w_u_soil_weight = 1.2 * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
@@ -72,7 +72,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     
     p_ult_reactions = []
     for prx, pry in piles_rel:
-        # Edge case protection for I_xx and I_yy
         R_u = (P_total_factored / n_piles) + \
               (Mu_y_total * prx / I_yy if I_yy > 0 else 0) + \
               (Mu_x_total * pry / I_xx if I_xx > 0 else 0)
@@ -93,7 +92,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     V_u_wb = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if py >= cut_y_pos)
     bw_y = get_triangular_width_at_y(cut_y_pos, footing_shape, b_ft, vertices) * 100
     
-    # Edge case protection for eval_d and bw_y
     v_u_wb_max = V_u_wb / (bw_y * eval_d * 100) if (bw_y > 0 and eval_d > 0) else 0
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
     
@@ -126,7 +124,7 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
 # 3D MODEL GENERATION (CACHED FOR PERFORMANCE)
 # =========================================================================
 @st.cache_data(show_spinner=False)
-def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tuple, pile_size, embed_m):
+def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tuple, pile_shape, pile_w, pile_l, embed_m):
     concrete_vertices = list(concrete_vertices_tuple)
     piles_actual = list(piles_actual_tuple)
     
@@ -159,8 +157,16 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
     draw_3d_wireframe_lines(fig_3d, column_vertices, t_actual, t_actual + 0.60, '#922b21')
 
     for idx, (px, py) in enumerate(piles_actual):
-        segments_count = 8
-        pile_nodes = [(px + (pile_size/2)*math.cos(s*2*math.pi/segments_count), py + (pile_size/2)*math.sin(s*2*math.pi/segments_count)) for s in range(segments_count)]
+        if pile_shape == "Circular Pile":
+            segments_count = 8
+            pile_nodes = [(px + (pile_w/2)*math.cos(s*2*math.pi/segments_count), py + (pile_w/2)*math.sin(s*2*math.pi/segments_count)) for s in range(segments_count)]
+        else:
+            pile_nodes = [
+                (px - pile_w/2, py - pile_l/2),
+                (px + pile_w/2, py - pile_l/2),
+                (px + pile_w/2, py + pile_l/2),
+                (px - pile_w/2, py + pile_l/2)
+            ]
         fig_3d.add_trace(create_3d_prism_trace(pile_nodes, -1.5, embed_m, '#34495e', 0.8, 'As-Built Pile', show_legend=(idx == 0)))
         draw_3d_wireframe_lines(fig_3d, pile_nodes, -1.5, embed_m, '#2c3e50')
 
@@ -170,26 +176,37 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # =========================================================================
 # UI & APPLICATION LAYOUT
 # =========================================================================
-st.title("📐 Enterprise Footing Suite (V7.3 - Optimized)")
-st.markdown("### Footing Analysis System: Fixed Manual Triangular Dimensioning and Edge Safety Check")
+st.title("📐 Enterprise Footing Suite (V7.4 - Dynamic Pile)")
+st.markdown("### Footing Analysis System: Dynamic Pile Shapes, Fixed Dimensions and Safety Checks")
 st.markdown("---")
 
 with st.sidebar:
     st.header("🏗️ Statics and Material Specifications")
     footing_shape_type = st.selectbox("Footing Geometry Shape:", ["Truncated Triangular Footing", "Rectangular Footing"], index=0)
     
-    st.subheader("1. Pile Properties and Load Capacity")
+    st.subheader("1. Pile Shape & Dimensions Configurations")
+    # [NEW FEATURE] Dynamic Pile Shape Selection
+    pile_shape = st.selectbox("Select Pile Configuration Shape:", ["Circular Pile", "Square/Rectangular Pile"], index=0)
+    if pile_shape == "Circular Pile":
+        pile_dia = st.number_input("Pile Diameter (m)", value=0.30, min_value=0.15, step=0.05)
+        pile_w = pile_dia
+        pile_l = pile_dia
+    else:
+        pile_w = st.number_input("Pile Width X-axis (m)", value=0.30, min_value=0.15, step=0.05)
+        pile_l = st.number_input("Pile Length Y-axis (m)", value=0.30, min_value=0.15, step=0.05)
+
     if footing_shape_type == "Truncated Triangular Footing":
         n_piles = 3
     else:
         n_piles = st.selectbox("Number of Piles in Group:", [2, 3, 4, 5, 6, 8, 9], index=2)
         
-    pile_size = st.number_input("Pile Cross-Section Size (m)", value=0.30, min_value=0.15, step=0.05)
     pile_cap = st.number_input("Safe Pile Compressive Capacity (tons/pile)", value=30.0, min_value=1.0)
     pile_tension_cap = st.number_input("Safe Pile Uplift Capacity (tons/pile)", value=10.0, min_value=0.0)
     
-    S_dist = 3.0 * pile_size
-    E_dist = max(pile_size, 0.35)
+    # Automatic Spacing Configuration matching the selected Pile Dimensions
+    max_pile_dim = max(pile_w, pile_l)
+    S_dist = 3.0 * max_pile_dim
+    E_dist = max(max_pile_dim, 0.35)
 
     if footing_shape_type == "Rectangular Footing":
         if n_piles == 2: piles_ideal = [(-S_dist/2, 0), (S_dist/2, 0)]
@@ -316,10 +333,11 @@ else:
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
+# Edge Distance calculation modified to adapt to Pile geometry dimensions
 net_min_edge_dist = float('inf')
 segments = [(concrete_vertices[i], concrete_vertices[(i+1)%len(concrete_vertices)]) for i in range(len(concrete_vertices))]
 for px, py in piles_actual:
-    current_min = min(point_to_segment_dist(px, py, seg[0][0], seg[0][1], seg[1][0], seg[1][1]) - pile_size/2 for seg in segments)
+    current_min = min(point_to_segment_dist(px, py, seg[0][0], seg[0][1], seg[1][0], seg[1][1]) - max_pile_dim/2 for seg in segments)
     if current_min < net_min_edge_dist: net_min_edge_dist = current_min
 
 if net_min_edge_dist < 0.10:
@@ -334,7 +352,7 @@ if thickness_mode == "Auto-Optimize":
         t_opt = d_opt + (concrete_cover_cm/100) + (pile_embed_cm/100) + ((bar_dia/1000)/2)
         step_safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
             d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, 
-            n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, phi_shear, footing_shape_type, B_ft, concrete_vertices
+            n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices
         )
         if step_safe: break
         d_opt += 0.02
@@ -345,7 +363,7 @@ else:
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
     step_safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, 
-        n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, phi_shear, footing_shape_type, B_ft, concrete_vertices
+        n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices
     )
 
 w_s_footing = footing_area * t_actual * 2.4
@@ -424,10 +442,16 @@ if not is_structure_crashed:
     ax_plan.scatter(0, 0, color='red', marker='+', s=200, linewidths=3, label='Column Center (0,0)', zorder=6)
     ax_plan.scatter(cg_actual_x, cg_actual_y, color='#f39c12', marker='X', s=130, label='True C.G. of Piles', zorder=5)
     
+    # [MODIFIED PLAN VIEW] Handles Circular and Square/Rectangular Piles dynamically
     for idx, (px, py) in enumerate(piles_actual):
         ix, iy = piles_ideal[idx]
-        ax_plan.add_patch(patches.Circle((ix, iy), pile_size/2, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2))
-        ax_plan.add_patch(patches.Circle((px, py), pile_size/2, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3))
+        if pile_shape == "Circular Pile":
+            ax_plan.add_patch(patches.Circle((ix, iy), pile_w/2, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2))
+            ax_plan.add_patch(patches.Circle((px, py), pile_w/2, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3))
+        else:
+            ax_plan.add_patch(patches.Rectangle((ix - pile_w/2, iy - pile_l/2), pile_w, pile_l, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2))
+            ax_plan.add_patch(patches.Rectangle((px - pile_w/2, py - pile_l/2), pile_w, pile_l, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3))
+            
         ax_plan.text(px, py, f"P{idx+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold', zorder=4)
         if ix != px or iy != py:
             ax_plan.plot([ix, px], [iy, py], color='#e74c3c', linestyle='-', linewidth=1.8, zorder=4)
@@ -453,8 +477,8 @@ if not is_structure_crashed:
     for idx, (px, py) in enumerate(piles_actual):
         ix, iy = piles_ideal[idx]
         if abs(py) < L_ft/2:
-            ax_sec.add_patch(patches.Rectangle((ix - pile_size/2, -0.4), pile_size, 0.4 + embed_m, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.5, zorder=1))
-            ax_sec.add_patch(patches.Rectangle((px - pile_size/2, -0.4), pile_size, 0.4 + embed_m, linewidth=1.8, edgecolor='#34495e', facecolor='#95a5a6', zorder=1))
+            ax_sec.add_patch(patches.Rectangle((ix - pile_w/2, -0.4), pile_w, 0.4 + embed_m, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.5, zorder=1))
+            ax_sec.add_patch(patches.Rectangle((px - pile_w/2, -0.4), pile_w, 0.4 + embed_m, linewidth=1.8, edgecolor='#34495e', facecolor='#95a5a6', zorder=1))
     
     cov_m = concrete_cover_cm / 100
     rb_rad_m = (bar_dia / 1000) / 2
@@ -477,7 +501,7 @@ if not is_structure_crashed:
     ax_sec.axis('off')
     ax_sec.set_title("Section View", fontsize=11, fontweight='bold')
     st.pyplot(fig)
-    plt.close(fig) # [CRITICAL FIX 1: MEMORY LEAK PREVENTION]
+    plt.close(fig)
 
 # =========================================================================
 # INTERACTIVE MULTI-TAB MATRIX OUTPUTS
@@ -506,8 +530,8 @@ with tab1:
 
 with tab2:
     st.subheader("🌐 Interactive 3D Solid Model Mesh")
-    # [CRITICAL FIX 3: 3D OPTIMIZATION] Execute cached function
-    mesh_fig = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_size, pile_embed_cm/100)
+    # Caching 3D Render engine by passing the updated dynamic geometry properties
+    mesh_fig = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm/100)
     st.plotly_chart(mesh_fig, use_container_width=True)
 
 with tab3:
@@ -523,6 +547,7 @@ with tab3:
         st.markdown(f"""
         **Geometric Sectional Properties:**
         * Number of piles ($n$): `{n_piles}` piles
+        * Pile Profile Config: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
         * Group $I_{{xx}}$ / $I_{{yy}}$: `{I_xx_group:.4f}` / `{I_yy_group:.4f}` m²
         * Eccentricity ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
         """)
@@ -547,7 +572,6 @@ with tab3:
 
     st.markdown("---")
     st.markdown("#### 📐 Critical Shear Stress Analysis")
-    # [CRITICAL FIX 4: ZERO DIVISION SAFETY in String output]
     safe_b0 = b_0_len*100 if b_0_len > 0 else 1.0
     safe_d = d_actual*100 if d_actual > 0 else 1.0
     safe_bw = bw_y_width*100 if bw_y_width > 0 else 1.0
