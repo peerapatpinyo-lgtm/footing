@@ -40,7 +40,7 @@ def initialize_thai_font_system():
 current_thai_font = initialize_thai_font_system()
 
 # =========================================================================
-# HELPER FUNCTIONS (MATH & GEOMETRY)
+# HELPER FUNCTIONS (MATH & GEOMETRY INTERSECTION)
 # =========================================================================
 def point_to_segment_dist(px, py, x1, y1, x2, y2):
     dx, dy = x2 - x1, y2 - y1
@@ -49,13 +49,43 @@ def point_to_segment_dist(px, py, x1, y1, x2, y2):
     t = max(0.0, min(1.0, t))
     return math.sqrt((px - (x1 + t * dx))**2 + (py - (y1 + t * dy))**2)
 
-def get_triangular_width_at_y(target_y, footing_shape, b_ft, vertices):
-    if footing_shape == "Rectangular Footing": return b_ft
-    y_coords_v = [v[1] for v in vertices]
-    y_top_bound, y_bot_bound = max(y_coords_v), min(y_coords_v)
-    if target_y > y_top_bound or target_y < y_bot_bound: return 0.0
-    x_max_at_y = max([v[0] for v in vertices if abs(v[1] - target_y) < 0.1], default=b_ft/2)
-    return 2 * abs(x_max_at_y)
+def get_polygon_section_width_at_y(target_y, vertices):
+    """คำนวณหาความกว้างแนวนอน (แกน X) ของรูปทรงฐานราก ณ ตำแหน่งระดับ Y ที่กำหนด"""
+    intersections = []
+    n = len(vertices)
+    for i in range(n):
+        p1 = vertices[i]
+        p2 = vertices[(i + 1) % n]
+        x1, y1 = p1[0], p1[1]
+        x2, y2 = p2[0], p2[1]
+        if min(y1, y2) <= target_y <= max(y1, y2):
+            if abs(y2 - y1) > 1e-6:
+                t = (target_y - y1) / (y2 - y1)
+                x_interp = x1 + t * (x2 - x1)
+                intersections.append(x_interp)
+            else:
+                intersections.extend([x1, x2])
+    if len(intersections) < 2: return 0.0
+    return max(intersections) - min(intersections)
+
+def get_polygon_section_length_at_x(target_x, vertices):
+    """คำนวณหาความยาวแนวตั้ง (แกน Y) ของรูปทรงฐานราก ณ ตำแหน่งแนว X ที่กำหนด (ใช้สไลด์หาหน้าตัดรับ Moment แกน Y)"""
+    intersections = []
+    n = len(vertices)
+    for i in range(n):
+        p1 = vertices[i]
+        p2 = vertices[(i + 1) % n]
+        x1, y1 = p1[0], p1[1]
+        x2, y2 = p2[0], p2[1]
+        if min(x1, x2) <= target_x <= max(x1, x2):
+            if abs(x2 - x1) > 1e-6:
+                t = (target_x - x1) / (x2 - x1)
+                y_interp = y1 + t * (y2 - y1)
+                intersections.append(y_interp)
+            else:
+                intersections.extend([y1, y2])
+    if len(intersections) < 2: return 0.0
+    return max(intersections) - min(intersections)
 
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
@@ -90,7 +120,7 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     
     cut_y_pos = cy/2 + eval_d
     V_u_wb = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if py >= cut_y_pos)
-    bw_y = get_triangular_width_at_y(cut_y_pos, footing_shape, b_ft, vertices) * 100
+    bw_y = get_polygon_section_width_at_y(cut_y_pos, vertices) * 100
     
     v_u_wb_max = V_u_wb / (bw_y * eval_d * 100) if (bw_y > 0 and eval_d > 0) else 0
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
@@ -185,7 +215,6 @@ with st.sidebar:
     footing_shape_type = st.selectbox("Footing Geometry Shape:", ["Truncated Triangular Footing", "Rectangular Footing"], index=0)
     
     st.subheader("1. Pile Shape & Dimensions Configurations")
-    # [NEW FEATURE] Dynamic Pile Shape Selection
     pile_shape = st.selectbox("Select Pile Configuration Shape:", ["Circular Pile", "Square/Rectangular Pile"], index=0)
     if pile_shape == "Circular Pile":
         pile_dia = st.number_input("Pile Diameter (m)", value=0.30, min_value=0.15, step=0.05)
@@ -203,7 +232,6 @@ with st.sidebar:
     pile_cap = st.number_input("Safe Pile Compressive Capacity (tons/pile)", value=30.0, min_value=1.0)
     pile_tension_cap = st.number_input("Safe Pile Uplift Capacity (tons/pile)", value=10.0, min_value=0.0)
     
-    # Automatic Spacing Configuration matching the selected Pile Dimensions
     max_pile_dim = max(pile_w, pile_l)
     S_dist = 3.0 * max_pile_dim
     E_dist = max(max_pile_dim, 0.35)
@@ -250,8 +278,16 @@ with st.sidebar:
     st.subheader("3. Service Loads & Soil Backfill")
     DL = st.number_input("Dead Load (tons)", value=55.0, min_value=0.0)
     LL = st.number_input("Live Load (tons)", value=30.0, min_value=0.0)
-    Mcx = st.number_input("Moment M_cx (ton-m)", value=10.0)
-    Mcy = st.number_input("Moment M_cy (ton-m)", value=8.0)
+    
+    # [MODIFIED] แยก Dead/Live สำหรับโมเมนต์ เพื่อจัดทำ Load Combination ตามหลักวิศวกรรมสากล
+    col_mom1, col_mom2 = st.columns(2)
+    with col_mom1:
+        Mcx_dl = st.number_input("Moment M_cx Dead (t-m)", value=6.0)
+        Mcy_dl = st.number_input("Moment M_cy Dead (t-m)", value=5.0)
+    with col_mom2:
+        Mcx_ll = st.number_input("Moment M_cx Live (t-m)", value=4.0)
+        Mcy_ll = st.number_input("Moment M_cy Live (t-m)", value=3.0)
+        
     soil_depth = st.number_input("Soil Backfill Depth (m)", value=1.0, min_value=0.0, step=0.1)
     soil_density = st.number_input("Soil Density (t/m³)", value=1.8, min_value=1.0, step=0.1)
     
@@ -304,11 +340,13 @@ piles_relative = [(p[0] - cg_actual_x, p[1] - cg_actual_y) for p in piles_actual
 I_yy_group = sum(p[0]**2 for p in piles_relative)
 I_xx_group = sum(p[1]**2 for p in piles_relative)
 
+# [MODIFIED] คำนวณตามมาตรฐานวิศวกรรมโครงสร้างจริง ไม่ใช่การคูณสุ่มตัวคูณเฉลี่ย
 P_service = DL + LL
 P_ultimate = (1.2 * DL) + (1.6 * LL)
-average_load_factor = P_ultimate / P_service if P_service > 0 else 1.45
-Mu_cx = Mcx * average_load_factor
-Mu_cy = Mcy * average_load_factor
+Mu_cx = (1.2 * Mcx_dl) + (1.6 * Mcx_ll)
+Mu_cy = (1.2 * Mcy_dl) + (1.6 * Mcy_ll)
+Ms_cx = Mcx_dl + Mcx_ll
+Ms_cy = Mcy_dl + Mcy_ll
 
 if footing_shape_type == "Rectangular Footing":
     footing_area = B_ft * L_ft
@@ -333,7 +371,6 @@ else:
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
-# Edge Distance calculation modified to adapt to Pile geometry dimensions
 net_min_edge_dist = float('inf')
 segments = [(concrete_vertices[i], concrete_vertices[(i+1)%len(concrete_vertices)]) for i in range(len(concrete_vertices))]
 for px, py in piles_actual:
@@ -368,8 +405,8 @@ else:
 
 w_s_footing = footing_area * t_actual * 2.4
 P_service_total = P_service + w_s_footing + W_soil
-Ms_x_total = Mcx + (P_service_total * (-ecc_y))
-Ms_y_total = Mcy + (P_service_total * (-ecc_x))
+Ms_x_total = Ms_cx + (P_service_total * (-ecc_y))
+Ms_y_total = Ms_cy + (P_service_total * (-ecc_x))
 
 pile_service_reactions = []
 for prx, pry in piles_relative:
@@ -378,22 +415,39 @@ for prx, pry in piles_relative:
           (Ms_x_total * pry / I_xx_group if I_xx_group > 0 else 0)
     pile_service_reactions.append(R_s)
 
-# Flexural Face Moments
-if footing_shape_type == "Rectangular Footing":
-    w_flex_x = B_ft * 100
-    w_flex_y = L_ft * 100
+# =========================================================================
+# FLEXURAL FACE MOMENT ANALYSIS (GOVERNING CRITICAL SECTIONS)
+# =========================================================================
+# [MODIFIED] แก้ไขระบบคำนวณหน้าตัดวิกฤตดัดใหม่ทั้งหมดเพื่อรองรับแรงดัดสองแกนของฐานรากสามเหลี่ยม
+
+# 1. การดัดรอบแกน X (เหล็กเสริมแนวตั้ง / แกน Y) - แบ่งคิดฝั่งบนและฝั่งล่างตอม่อ
+Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
+Mu_x_bot = abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
+w_flex_x_top = max(30.0, get_polygon_section_width_at_y(cy/2, concrete_vertices) * 100)
+w_flex_x_bot = max(30.0, get_polygon_section_width_at_y(-cy/2, concrete_vertices) * 100)
+
+n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top = design_rebar_by_axis(Mu_x_top, w_flex_x_top, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot = design_rebar_by_axis(Mu_x_bot, w_flex_x_bot, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+
+# ควบคุมด้วยฝั่งที่ให้เนื้อที่เหล็กเสริมมากที่สุด (Worst Case Side)
+if As_req_x_top >= As_req_x_bot:
+    Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_top, w_flex_x_top, n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top
 else:
-    w_flex_x = get_triangular_width_at_y(cy/2, footing_shape_type, B_ft, concrete_vertices) * 100
-    w_flex_y = get_triangular_width_at_y(-cy/2, footing_shape_type, B_ft, concrete_vertices) * 100
+    Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_bot, w_flex_x_bot, n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot
 
-Mu_x_face = max(abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2)),
-                abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2)))
-Mu_y_face = 0.0 if footing_shape_type != "Rectangular Footing" else max(
-    abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2)),
-    abs(sum(p_ult_out[i] * (-cx/2 - p[0]) for i, p in enumerate(piles_actual) if p[0] < -cx/2)))
+# 2. การดัดรอบแกน Y (เหล็กเสริมแนวนอน / แกน X) - แบ่งคิดฝั่งซ้ายและฝั่งขวาตอม่อ (แก้ไขเคสสามเหลี่ยมไม่เป็นศูนย์แล้ว!)
+Mu_y_right = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
+Mu_y_left = abs(sum(p_ult_out[i] * (-cx/2 - p[0]) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
+w_flex_y_right = max(30.0, get_polygon_section_length_at_x(cx/2, concrete_vertices) * 100)
+w_flex_y_left = max(30.0, get_polygon_section_length_at_x(-cx/2, concrete_vertices) * 100)
 
-n_main_bars_x, sp_main_x, crash_fx, As_req_x = design_rebar_by_axis(Mu_x_face, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
-n_main_bars_y, sp_main_y, crash_fy, As_req_y = design_rebar_by_axis(Mu_y_face, w_flex_y, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+n_bars_y_right, sp_y_right, crash_y_right, As_req_y_right = design_rebar_by_axis(Mu_y_right, w_flex_y_right, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left = design_rebar_by_axis(Mu_y_left, w_flex_y_left, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
+
+if As_req_y_right >= As_req_y_left:
+    Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_right, w_flex_y_right, n_bars_y_right, sp_y_right, crash_y_right, As_req_y_right
+else:
+    Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_left, w_flex_y_left, n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left
 
 is_structure_crashed = crash_fx or crash_fy or (not step_safe)
 
@@ -401,7 +455,7 @@ is_structure_crashed = crash_fx or crash_fy or (not step_safe)
 b1_box, b2_box = cx + d_actual, cy + d_actual
 b_0_len = 2 * (b1_box + b2_box)
 cut_y_pos = cy/2 + d_actual
-bw_y_width = get_triangular_width_at_y(cut_y_pos, footing_shape_type, B_ft, concrete_vertices)
+bw_y_width = get_polygon_section_width_at_y(cut_y_pos, concrete_vertices)
 
 Vu_punch_kg = float(sum(max(0.0, float(p)) for p in p_ult_out)) * 1000.0
 Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_actual[idx][1] >= cut_y_pos) * 1000.0
@@ -409,156 +463,6 @@ Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_ac
 pile_ur = max(pile_service_reactions) / pile_cap if pile_cap > 0 else 1.0
 punching_ur = v_up / v_cp if v_cp > 0 else 1.0
 wide_beam_ur = v_uwb / v_cwb if v_cwb > 0 else 1.0
-
-# =========================================================================
-# DIAGNOSTICS & ADVISORY REPORT
-# =========================================================================
-st.markdown("### 🔍 2. Structural Health and Minimum Dimensions Report")
-col_adv1, col_adv2 = st.columns(2)
-with col_adv1:
-    st.write(f"**📐 Minimum Geometric Check:** Actual: **{B_ft:.2f} x {L_ft:.2f} m**")
-    st.success(f"✅ Pass limits ($B \\ge {B_min_geometry:.2f}$ m, $L \\ge {L_min_geometry:.2f}$ m)")
-
-with col_adv2:
-    if not step_safe: st.error("🚨 **Shear Status:** Failed! Section too narrow/thin.")
-    else: st.success("✅ **Shear Status:** Passed all checks.")
-
-# =========================================================================
-# 2D ENGINEERING BLUEPRINT
-# =========================================================================
-if not is_structure_crashed:
-    st.markdown("### 📊 3. 2D Engineering Blueprint")
-    fig, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(14, 6))
-    
-    # Top View Plan
-    footing_shape_patch = patches.Polygon(concrete_vertices, closed=True, linewidth=2.5, edgecolor='#2c3e50', facecolor='#eaeded', zorder=1)
-    ax_plan.add_patch(footing_shape_patch)
-    
-    x_coords = [v[0] for v in concrete_vertices]
-    y_coords = [v[1] for v in concrete_vertices]
-    ax_plan.set_xlim(min(x_coords) - 0.6, max(x_coords) + 0.6)
-    ax_plan.set_ylim(min(y_coords) - 0.6, max(y_coords) + 0.6)
-    ax_plan.add_patch(patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.8, edgecolor='#e74c3c', facecolor='#f1948a', zorder=4))
-    ax_plan.scatter(0, 0, color='red', marker='+', s=200, linewidths=3, label='Column Center (0,0)', zorder=6)
-    ax_plan.scatter(cg_actual_x, cg_actual_y, color='#f39c12', marker='X', s=130, label='True C.G. of Piles', zorder=5)
-    
-    # [MODIFIED PLAN VIEW] Handles Circular and Square/Rectangular Piles dynamically
-    for idx, (px, py) in enumerate(piles_actual):
-        ix, iy = piles_ideal[idx]
-        if pile_shape == "Circular Pile":
-            ax_plan.add_patch(patches.Circle((ix, iy), pile_w/2, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2))
-            ax_plan.add_patch(patches.Circle((px, py), pile_w/2, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3))
-        else:
-            ax_plan.add_patch(patches.Rectangle((ix - pile_w/2, iy - pile_l/2), pile_w, pile_l, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.7, zorder=2))
-            ax_plan.add_patch(patches.Rectangle((px - pile_w/2, py - pile_l/2), pile_w, pile_l, linewidth=1.5, edgecolor='#34495e', facecolor='#7f8c8d', alpha=0.8, zorder=3))
-            
-        ax_plan.text(px, py, f"P{idx+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold', zorder=4)
-        if ix != px or iy != py:
-            ax_plan.plot([ix, px], [iy, py], color='#e74c3c', linestyle='-', linewidth=1.8, zorder=4)
-            ax_plan.scatter(ix, iy, color='#e74c3c', marker='.', s=40, zorder=4)
-            
-    dim_y = min(y_coords) - 0.25
-    ax_plan.annotate('', xy=(min(x_coords), dim_y), xytext=(max(x_coords), dim_y), arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=1.5))
-    ax_plan.text(0, dim_y - 0.12, f"B = {B_ft:.2f} m", ha='center', va='center', color='#2c3e50', fontweight='bold', fontsize=10)
-    
-    dim_x = min(x_coords) - 0.25
-    ax_plan.annotate('', xy=(dim_x, min(y_coords)), xytext=(dim_x, max(y_coords)), arrowprops=dict(arrowstyle='<->', color='#2c3e50', lw=1.5))
-    ax_plan.text(dim_x - 0.12, 0, f"L = {L_ft:.2f} m", ha='center', va='center', color='#2c3e50', fontweight='bold', fontsize=10, rotation=90)
-
-    ax_plan.set_aspect('equal')
-    ax_plan.grid(True, linestyle=':', alpha=0.6)
-    ax_plan.legend(loc="upper right", fontsize=8)
-    ax_plan.set_title(f"Plan View: {B_ft:.2f} x {L_ft:.2f} m", fontsize=11, fontweight='bold')
-    
-    # Section View
-    sec_w = B_ft
-    ax_sec.add_patch(patches.Rectangle((-sec_w/2, 0), sec_w, t_actual, linewidth=2, edgecolor='#2c3e50', facecolor='#f2f4f4', zorder=2))
-    embed_m = pile_embed_cm / 100
-    for idx, (px, py) in enumerate(piles_actual):
-        ix, iy = piles_ideal[idx]
-        if abs(py) < L_ft/2:
-            ax_sec.add_patch(patches.Rectangle((ix - pile_w/2, -0.4), pile_w, 0.4 + embed_m, linewidth=1.2, edgecolor='#bdc3c7', facecolor='none', linestyle='--', alpha=0.5, zorder=1))
-            ax_sec.add_patch(patches.Rectangle((px - pile_w/2, -0.4), pile_w, 0.4 + embed_m, linewidth=1.8, edgecolor='#34495e', facecolor='#95a5a6', zorder=1))
-    
-    cov_m = concrete_cover_cm / 100
-    rb_rad_m = (bar_dia / 1000) / 2
-    ax_sec.plot([-sec_w/2 + cov_m, sec_w/2 - cov_m], [cov_m + embed_m, cov_m + embed_m], color='#1f618d', linewidth=3.5, zorder=3)
-    
-    dots_count = max(int(n_main_bars_y), 4)
-    for i in range(dots_count):
-        dot_x = (-sec_w/2 + cov_m) + i * ((sec_w - 2*cov_m) / max(1, dots_count - 1))
-        ax_sec.add_patch(patches.Circle((dot_x, cov_m + embed_m + rb_rad_m*2), rb_rad_m, color='#c0392b', zorder=4))
-        
-    ax_sec.annotate('', xy=(sec_w/2 + 0.1, 0), xytext=(sec_w/2 + 0.1, t_actual), arrowprops=dict(arrowstyle='<->', color='#2c3e50'))
-    ax_sec.text(sec_w/2 + 0.15, t_actual/2, f"t = {t_actual*100:.0f} cm", va='center', fontweight='bold', fontsize=9)
-
-    bp_text = f"Dimensions: {B_ft:.2f} x {L_ft:.2f} m | d = {d_actual*100:.1f} cm\nX-Rebar: DB{bar_dia} @ {sp_main_x:.0f} cm\nY-Rebar: DB{bar_dia} @ {sp_main_y:.0f} cm"
-    ax_sec.text(0, t_actual + 0.15, bp_text, ha='center', va='bottom', fontsize=9, fontweight='bold', bbox=dict(boxstyle='round,pad=0.5', facecolor='#fcf3cf', alpha=0.5))
-    
-    ax_sec.set_xlim(-sec_w/2 - 0.5, sec_w/2 + 0.5)
-    ax_sec.set_ylim(-0.5, t_actual + 0.6)
-    ax_sec.set_aspect('equal')
-    ax_sec.axis('off')
-    ax_sec.set_title("Section View", fontsize=11, fontweight='bold')
-    st.pyplot(fig)
-    plt.close(fig)
-
-# =========================================================================
-# INTERACTIVE MULTI-TAB MATRIX OUTPUTS
-# =========================================================================
-tab1, tab2, tab3 = st.tabs(["📝 Statics Safety Summary", "🌐 3D Solid Model Mesh", "📋 Calculations and Stress Values"])
-
-with tab1:
-    st.subheader("📋 Engineering Dimensions Summary")
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    with col_m1: st.metric("Maximum Total Width (B)", f"{B_ft:.2f} m")
-    with col_m2: st.metric("Maximum Total Length (L)", f"{L_ft:.2f} m")
-    with col_m3: st.metric("Total Footing Thickness (t)", f"{t_actual*100:.1f} cm")
-    with col_m4: st.metric("Actual Footing Surface Area", f"{footing_area:.3f} sq.m")
-
-    st.markdown("#### 📊 Structural Performance (D/C Ratio)")
-    col_ur1, col_ur2, col_ur3 = st.columns(3)
-    with col_ur1:
-        st.metric("Pile Load Capacity UR", f"{pile_ur*100:.1f}%", delta=f"{100 - pile_ur*100:.1f}% Margin", delta_color="inverse")
-        st.progress(min(max(pile_ur, 0.0), 1.0))
-    with col_ur2:
-        st.metric("Punching Shear UR", f"{punching_ur*100:.1f}%", delta=f"{100 - punching_ur*100:.1f}% Margin", delta_color="inverse")
-        st.progress(min(max(punching_ur, 0.0), 1.0))
-    with col_ur3:
-        st.metric("Wide-Beam Shear UR", f"{wide_beam_ur*100:.1f}%", delta=f"{100 - wide_beam_ur*100:.1f}% Margin", delta_color="inverse")
-        st.progress(min(max(wide_beam_ur, 0.0), 1.0))
-
-with tab2:
-    st.subheader("🌐 Interactive 3D Solid Model Mesh")
-    # Caching 3D Render engine by passing the updated dynamic geometry properties
-    mesh_fig = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm/100)
-    st.plotly_chart(mesh_fig, use_container_width=True)
-
-with tab3:
-    st.subheader("📋 Ultimate Engineering Calculation Report")
-    st.markdown("Design Standard Reference: **ACI 318-19 / DPT 1301/1302-61**")
-    st.markdown("---")
-    
-    # Pre-calculating total factored forces for clean substitutions
-    P_u_total = P_ultimate + 1.2 * (w_s_footing + W_soil)
-    Mu_x_total = Mu_cx + P_u_total * (-ecc_y)
-    Mu_y_total = Mu_cy + P_u_total * (-ecc_x)
-    
-    # -------------------------------------------------------------------------
-    # STEP 1: EFFECTIVE DEPTH CALCULATION
-    # -------------------------------------------------------------------------
-    st.markdown("### 📐 Step 1: Effective Depth Calculation ($d$)")
-    st.markdown("The effective depth is calculated by subtracting concrete cover, pile embedment depth, and half of the main rebar diameter from the total thickness.")
-    
-    cover_m = concrete_cover_cm / 100
-    embed_m = pile_embed_cm / 100 if 'pile_embed_cm' in locals() else 0.1
-    bar_m = bar_dia / 1000
-    t_footing_m = d_actual + cover_m + embed_m
-    
-    st.markdown(r"$$\text{Governing Equation: } d = t_{\text{footing}} - \text{Cover} - \text{Embedment} - \frac{\emptyset_{\text{bar}}}{2}$$")
-    st.markdown(f"$$\\text{{Substitution: }} d = {t_footing_m:.3f} \\text{{ m}} - {cover_m:.3f} \\text{{ m}} - {embed_m:.3f} \\text{{ m}} - \\frac{{{bar_m:.3f} \\text{{ m}}}}{{2}} = \\mathbf{{{d_actual:.3f}}} \\text{{ m}}$$")
-    
-    st.markdown("---")
     
     # -------------------------------------------------------------------------
     # STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
