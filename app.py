@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V7.5", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V7.6", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -119,6 +119,39 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
     ax.legend(loc='upper right')
     return fig
 
+def generate_rebar_detailing_view(t_actual, B_ft, concrete_cover_cm, pile_embed_cm, bar_dia, n_bars_x, sp_x, cx, cy):
+    fig, ax = plt.subplots(figsize=(10, 4))
+    
+    footing_rect = patches.Rectangle((-B_ft/2, 0), B_ft, t_actual, linewidth=2, edgecolor='#1e8449', facecolor='#2ecc71', alpha=0.1)
+    ax.add_patch(footing_rect)
+    
+    col_rect = patches.Rectangle((-cx/2, t_actual), cx, 0.40, linewidth=2, edgecolor='#922b21', facecolor='#e74c3c', alpha=0.5)
+    ax.add_patch(col_rect)
+    
+    pile1 = patches.Rectangle((-B_ft/3 - 0.15, 0), 0.30, pile_embed_cm/100, facecolor='#34495e', alpha=0.7)
+    pile2 = patches.Rectangle((B_ft/3 - 0.15, 0), 0.30, pile_embed_cm/100, facecolor='#34495e', alpha=0.7)
+    ax.add_patch(pile1)
+    ax.add_patch(pile2)
+    
+    start_rebar_z = (concrete_cover_cm + pile_embed_cm) / 100
+    rebar_x_coords = np.linspace(-B_ft/2 + (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100), min(n_bars_x, 15))
+    
+    ax.plot([-B_ft/2 + (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z], color='red', linewidth=3, label=f'Main Rebar DB{bar_dia}')
+    ax.plot([-B_ft/2 + (concrete_cover_cm/100), -B_ft/2 + (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z + 0.15], color='red', linewidth=3)
+    ax.plot([B_ft/2 - (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z + 0.15], color='red', linewidth=3)
+    
+    for rx in rebar_x_coords:
+        ax.plot(rx, start_rebar_z + 0.015, 'o', color='darkred', markersize=6)
+        
+    ax.set_xlim(-B_ft/2 - 0.2, B_ft/2 + 0.2)
+    ax.set_ylim(-0.1, t_actual + 0.5)
+    ax.set_title(f'Footing Cross-Section Rebar Detailing View ({n_bars_x} - DB{bar_dia} @ {sp_x:.0f} cm)', fontsize=11, fontweight='bold')
+    ax.set_xlabel('Width Dimension (m)')
+    ax.set_ylabel('Thickness/Height (m)')
+    ax.grid(True, linestyle=':', alpha=0.5)
+    ax.legend(loc='upper right')
+    return fig
+
 # =========================================================================
 # CORE ENGINEERING LOGIC
 # =========================================================================
@@ -179,9 +212,6 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
     spacing = math.floor((width_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
     return n_bars, min(spacing, 45.0), False, As_req
 
-# =========================================================================
-# 3D MODEL GENERATION (CACHED FOR PERFORMANCE)
-# =========================================================================
 @st.cache_data(show_spinner=False)
 def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tuple, pile_shape, pile_w, pile_l, embed_m):
     concrete_vertices = list(concrete_vertices_tuple)
@@ -221,10 +251,8 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
             pile_nodes = [(px + (pile_w/2)*math.cos(s*2*math.pi/segments_count), py + (pile_w/2)*math.sin(s*2*math.pi/segments_count)) for s in range(segments_count)]
         else:
             pile_nodes = [
-                (px - pile_w/2, py - pile_l/2),
-                (px + pile_w/2, py - pile_l/2),
-                (px + pile_w/2, py + pile_l/2),
-                (px - pile_w/2, py + pile_l/2)
+                (px - pile_w/2, py - pile_l/2), (px + pile_w/2, py - pile_l/2),
+                (px + pile_w/2, py + pile_l/2), (px - pile_w/2, py + pile_l/2)
             ]
         fig_3d.add_trace(create_3d_prism_trace(pile_nodes, -1.5, embed_m, '#34495e', 0.8, 'As-Built Pile', show_legend=(idx == 0)))
         draw_3d_wireframe_lines(fig_3d, pile_nodes, -1.5, embed_m, '#2c3e50')
@@ -235,8 +263,8 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # =========================================================================
 # UI SIDEBAR CONFIGURATIONS
 # =========================================================================
-st.title("📐 Enterprise Footing Suite (V7.5 - Custom Combination)")
-st.markdown("### Footing Analysis System: Dynamic Pile Shapes, Configurable Load Combinations and Safety Checks")
+st.title("📐 Enterprise Footing Suite (V7.6 - Complete Version)")
+st.markdown("### Footing Analysis System: Load Combinations, As-Built Analysis & Rebar Detailing")
 st.markdown("---")
 
 with st.sidebar:
@@ -343,7 +371,7 @@ phi_shear, phi_flexure = 0.75, 0.90
 ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 
 # =========================================================================
-# AS-BUILT FIELD SURVEY DATA EDITOR
+# AS-BUILT FIELD SURVEY DATA EDITOR (STEP 1)
 # =========================================================================
 st.markdown("### 📍 1. As-Built Field Survey Analysis")
 st.info("💡 **Dynamic Calculation:** Modifying ΔX or ΔY will immediately update the load distributions and structural diagrams below.")
@@ -464,7 +492,6 @@ if As_req_y_right >= As_req_y_left:
 else:
     Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_left, w_flex_y_left, n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left
 
-# Coupling state variable assignments
 P_u_total = P_ultimate + factor_dl * (w_s_footing + W_soil)
 Mu_x_total = Mu_cx + (P_u_total * (-ecc_y))
 Mu_y_total = Mu_cy + (P_u_total * (-ecc_x))
@@ -504,9 +531,6 @@ st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{
 for i in range(n_piles):
     xi = piles_relative[i][0]
     yi = piles_relative[i][1]
-    term_p = P_u_total / n_piles
-    term_my = (Mu_y_total * xi) / I_yy_group if I_yy_group > 0 else 0.0
-    term_mx = (Mu_x_total * yi) / I_xx_group if I_xx_group > 0 else 0.0
     
     st.markdown(f"**🔴 Pile Identifier: P{i+1}** ($x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
     st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}} = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
@@ -562,12 +586,13 @@ if available_length_x >= l_d_required:
 else:
     st.warning(f"⚠️ **Hook Required:** Available length ({available_length_x:.1f} cm) < {l_d_required:.1f} cm. 90-degree hooks must be detailed.")
 
-# -------------------------------------------------------------------------
-# STEP 6: DUAL VISUALIZATION (2D MATPLOTLIB PLAN & 3D INTERACTIVE MESH)
-# -------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🗺️ Step 6: Engineering Visual Twin Plots (2D & 3D Twins)")
-st.markdown("วิเคราะห์ตำแหน่งเสาตอม่อ ขอบเขตโครงสร้างฐานราก และพิกัดตำแหน่งจริงหลังตอกเข็ม (As-Built Field Coordinates)")
+
+# -------------------------------------------------------------------------
+# STEP 6: DUAL VISUALIZATION (2D MATPLOTLIB PLAN, SECTION & 3D INTERACTIVE MESH)
+# -------------------------------------------------------------------------
+st.markdown("### 🗺️ Step 6: Engineering Visual Twin Plots (2D, Section & 3D Twins)")
+st.markdown("วิเคราะห์ตำแหน่งเสาตอม่อ ขอบเขตโครงสร้างฐานราก และพิกัดตำแหน่งจริงพร้อมแสดงผลการเสริมเหล็ก")
 
 col_plot1, col_plot2 = st.columns(2)
 
@@ -577,9 +602,13 @@ with col_plot1:
     st.pyplot(fig_2d)
 
 with col_plot2:
-    st.markdown("#### 🧊 B) 3D Interactive Model (Plotly Mesh)")
-    fig_3d = generate_3d_mesh(
-        tuple(concrete_vertices), t_actual, cx, cy, 
-        tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100
-    )
-    st.plotly_chart(fig_3d, use_container_width=True)
+    st.markdown("#### 🟥 B) 2D Rebar Detailing Section View")
+    fig_rebar = generate_rebar_detailing_view(t_actual, B_ft, concrete_cover_cm, pile_embed_cm, bar_dia, n_main_bars_x, sp_main_x, cx, cy)
+    st.pyplot(fig_rebar)
+
+st.markdown("#### 🧊 C) 3D Interactive Mesh")
+fig_3d = generate_3d_mesh(
+    tuple(concrete_vertices), t_actual, cx, cy, 
+    tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100
+)
+st.plotly_chart(fig_3d, use_container_width=True)
