@@ -324,6 +324,9 @@ with st.sidebar:
     st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ")
     footing_shape_type = st.selectbox("รูปทรงทางเรขาคณิตฐานราก:", ["Truncated Triangular Footing", "Rectangular Footing"], index=1)
     
+    # 🔥 FIXED: เพิ่มตัวแปร col_position ที่หายไป กลับเข้า UI
+    col_position = st.selectbox("ตำแหน่งเสาตอม่อ (Column Position):", ["Interior", "Edge", "Corner"], index=0)
+    
     st.subheader("🛠️ User-Defined Load Combination Factors")
     factor_dl = st.number_input("γ_DL (Dead Load Factor)", value=1.2, step=0.1)
     factor_ll = st.number_input("γ_LL (Live Load Factor)", value=1.6, step=0.1)
@@ -414,7 +417,6 @@ edited_df = st.data_editor(df_initial, disabled=['ชื่อเข็ม', 'Id
 # คำนวณพิกัดAs-Built
 piles_actual = []
 for _, row in edited_df.iterrows():
-    # 🔥 FIXED: แก้ไขตัวอักษร 'm.' เป็น 'ม.' เรียบร้อยแล้ว หมดปัญหา KeyError
     piles_actual.append((row['Ideal X (ม.)'] + row['ΔX (ม.) - หน้างาน'], row['Ideal Y (ม.)'] + row['ΔY (ม.) - หน้างาน']))
 
 # หา CG ของกลุ่มเข็มจริง
@@ -431,6 +433,10 @@ I_xx_group = max(0.001, sum(p[1]**2 for p in piles_relative))
 P_ultimate = (factor_dl * DL) + (factor_ll * LL)
 Mu_cx = (factor_dl * Mcx_dl) + (factor_ll * Mcx_ll)
 Mu_cy = (factor_dl * Mcy_dl) + (factor_ll * Mcy_ll)
+
+# 🔥 FIXED: เพิ่มการประกาศ Service Moments ป้องกัน NameError ในบรรทัดตรวจสอบ Service
+Ms_cx = Mcx_dl + Mcx_ll
+Ms_cy = Mcy_dl + Mcy_ll
 
 # พื้นที่ฐานรากและน้ำหนักดินถม
 footing_area = B_ft * L_ft
