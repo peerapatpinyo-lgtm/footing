@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V7.6", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V7.7", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -42,48 +42,35 @@ current_thai_font = initialize_thai_font_system()
 # =========================================================================
 # HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION)
 # =========================================================================
-def point_to_segment_dist(px, py, x1, y1, x2, y2):
-    dx, dy = x2 - x1, y2 - y1
-    if dx == 0 and dy == 0: return math.sqrt((px - x1)**2 + (py - py)**2)
-    t = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)
-    t = max(0.0, min(1.0, t))
-    return math.sqrt((px - (x1 + t * dx))**2 + (py - (y1 + t * dy))**2)
-
 def get_polygon_section_width_at_y(target_y, vertices):
     intersections = []
     n = len(vertices)
     for i in range(n):
-        p1 = vertices[i]
-        p2 = vertices[(i + 1) % n]
+        p1, p2 = vertices[i], vertices[(i + 1) % n]
         x1, y1 = p1[0], p1[1]
         x2, y2 = p2[0], p2[1]
         if min(y1, y2) <= target_y <= max(y1, y2):
             if abs(y2 - y1) > 1e-6:
                 t = (target_y - y1) / (y2 - y1)
-                x_interp = x1 + t * (x2 - x1)
-                intersections.append(x_interp)
+                intersections.append(x1 + t * (x2 - x1))
             else:
                 intersections.extend([x1, x2])
-    if len(intersections) < 2: return 0.0
-    return max(intersections) - min(intersections)
+    return max(intersections) - min(intersections) if len(intersections) >= 2 else 0.0
 
 def get_polygon_section_length_at_x(target_x, vertices):
     intersections = []
     n = len(vertices)
     for i in range(n):
-        p1 = vertices[i]
-        p2 = vertices[(i + 1) % n]
+        p1, p2 = vertices[i], vertices[(i + 1) % n]
         x1, y1 = p1[0], p1[1]
         x2, y2 = p2[0], p2[1]
         if min(x1, x2) <= target_x <= max(x1, x2):
             if abs(x2 - x1) > 1e-6:
                 t = (target_x - x1) / (x2 - x1)
-                y_interp = y1 + t * (y2 - y1)
-                intersections.append(y_interp)
+                intersections.append(y1 + t * (y2 - y1))
             else:
                 intersections.extend([y1, y2])
-    if len(intersections) < 2: return 0.0
-    return max(intersections) - min(intersections)
+    return max(intersections) - min(intersections) if len(intersections) >= 2 else 0.0
 
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
@@ -101,55 +88,100 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
     
     for i, (px, py) in enumerate(piles_actual):
         if pile_shape == "Circular Pile":
-            pile_shape_patch = patches.Circle((px, py), pile_w/2, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
+            patch = patches.Circle((px, py), pile_w/2, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
         else:
-            pile_shape_patch = patches.Rectangle((px - pile_w/2, py - pile_l/2), pile_w, pile_l, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
-        ax.add_patch(pile_shape_patch)
+            patch = patches.Rectangle((px - pile_w/2, py - pile_l/2), pile_w, pile_l, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
+        ax.add_patch(patch)
         ax.text(px, py, f"P{i+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold')
         
     ax.axhline(0, color='black', linewidth=0.5, linestyle='--')
     ax.axvline(0, color='black', linewidth=0.5, linestyle='--')
-    ax.set_xlabel('X-Axis Offset (m)')
-    ax.set_ylabel('Y-Axis Offset (m)')
-    ax.set_title('As-Built Footing Plan View (2D Mapping)', fontsize=12, fontweight='bold')
+    ax.set_xlabel('X-Axis (m)')
+    ax.set_ylabel('Y-Axis (m)')
+    ax.set_title('As-Built Footing Plan View', fontsize=12, fontweight='bold')
     ax.axis('equal')
     ax.grid(True, linestyle=':', alpha=0.6)
-    
-    ax.plot([], [], 's', color='#34495e', label='As-Built Piles')
-    ax.legend(loc='upper right')
     return fig
 
-def generate_rebar_detailing_view(t_actual, B_ft, concrete_cover_cm, pile_embed_cm, bar_dia, n_bars_x, sp_x, cx, cy):
-    fig, ax = plt.subplots(figsize=(10, 4))
+# 🚀 NEW ULTIMATE REBAR DETAILING VIEW
+def generate_rebar_detailing_view(t_actual, B_ft, cover_cm, embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel):
+    fig, ax = plt.subplots(figsize=(10, 5))
     
-    footing_rect = patches.Rectangle((-B_ft/2, 0), B_ft, t_actual, linewidth=2, edgecolor='#1e8449', facecolor='#2ecc71', alpha=0.1)
-    ax.add_patch(footing_rect)
+    c_m = cover_cm / 100
+    e_m = embed_cm / 100
+    d_m = bar_dia / 1000
+    hook_len = min(0.20, t_actual/2 - c_m)
     
-    col_rect = patches.Rectangle((-cx/2, t_actual), cx, 0.40, linewidth=2, edgecolor='#922b21', facecolor='#e74c3c', alpha=0.5)
-    ax.add_patch(col_rect)
+    # 1. Base Outlines
+    footing = patches.Rectangle((-B_ft/2, 0), B_ft, t_actual, linewidth=2, edgecolor='#27ae60', facecolor='#eaeded', alpha=0.7)
+    ax.add_patch(footing)
     
-    pile1 = patches.Rectangle((-B_ft/3 - 0.15, 0), 0.30, pile_embed_cm/100, facecolor='#34495e', alpha=0.7)
-    pile2 = patches.Rectangle((B_ft/3 - 0.15, 0), 0.30, pile_embed_cm/100, facecolor='#34495e', alpha=0.7)
+    col_stub = patches.Rectangle((-cx/2, t_actual), cx, 0.50, linewidth=2, edgecolor='#c0392b', facecolor='#f2d7d5', alpha=0.7)
+    ax.add_patch(col_stub)
+    
+    # 2. Piles
+    p_w = 0.30
+    pile1 = patches.Rectangle((-B_ft/3 - p_w/2, -0.3), p_w, 0.3 + e_m, facecolor='#7f8c8d', edgecolor='#2c3e50', linewidth=1.5)
+    pile2 = patches.Rectangle((B_ft/3 - p_w/2, -0.3), p_w, 0.3 + e_m, facecolor='#7f8c8d', edgecolor='#2c3e50', linewidth=1.5)
     ax.add_patch(pile1)
     ax.add_patch(pile2)
     
-    start_rebar_z = (concrete_cover_cm + pile_embed_cm) / 100
-    rebar_x_coords = np.linspace(-B_ft/2 + (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100), min(n_bars_x, 15))
+    # 3. Bottom Rebar (Main X & Transverse Y)
+    bot_z_x = e_m + c_m + (d_m/2)
+    bot_z_y = bot_z_x + d_m
+    left_x = -B_ft/2 + c_m
+    right_x = B_ft/2 - c_m
     
-    ax.plot([-B_ft/2 + (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z], color='red', linewidth=3, label=f'Main Rebar DB{bar_dia}')
-    ax.plot([-B_ft/2 + (concrete_cover_cm/100), -B_ft/2 + (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z + 0.15], color='red', linewidth=3)
-    ax.plot([B_ft/2 - (concrete_cover_cm/100), B_ft/2 - (concrete_cover_cm/100)], [start_rebar_z, start_rebar_z + 0.15], color='red', linewidth=3)
+    # Main X-Bar
+    ax.plot([left_x, right_x], [bot_z_x, bot_z_x], color='#c0392b', linewidth=3, label=f'Bottom Main DB{bar_dia}')
+    ax.plot([left_x, left_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=3)
+    ax.plot([right_x, right_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=3)
     
-    for rx in rebar_x_coords:
-        ax.plot(rx, start_rebar_z + 0.015, 'o', color='darkred', markersize=6)
+    # Transverse Y-Dots
+    x_dots = np.linspace(left_x + c_m, right_x - c_m, min(n_bars_x, 20))
+    for rx in x_dots:
+        ax.plot(rx, bot_z_y, 'o', color='#8e44ad', markersize=5, label='Transverse' if rx == x_dots[0] else "")
         
-    ax.set_xlim(-B_ft/2 - 0.2, B_ft/2 + 0.2)
-    ax.set_ylim(-0.1, t_actual + 0.5)
-    ax.set_title(f'Footing Cross-Section Rebar Detailing View ({n_bars_x} - DB{bar_dia} @ {sp_x:.0f} cm)', fontsize=11, fontweight='bold')
-    ax.set_xlabel('Width Dimension (m)')
-    ax.set_ylabel('Thickness/Height (m)')
-    ax.grid(True, linestyle=':', alpha=0.5)
-    ax.legend(loc='upper right')
+    # 4. Top Rebar (If Required)
+    if require_top_steel:
+        top_z_x = t_actual - c_m - (d_m/2)
+        top_z_y = top_z_x - d_m
+        
+        ax.plot([left_x, right_x], [top_z_x, top_z_x], color='#2980b9', linewidth=2.5, label='Top Steel (Nominal/Tension)')
+        ax.plot([left_x, left_x], [top_z_x, top_z_x - hook_len], color='#2980b9', linewidth=2.5)
+        ax.plot([right_x, right_x], [top_z_x, top_z_x - hook_len], color='#2980b9', linewidth=2.5)
+        
+        for rx in x_dots:
+            ax.plot(rx, top_z_y, 'o', color='#16a085', markersize=4)
+
+    # 5. Column Dowels (L-Bars)
+    dowel_left = -cx/2 + 0.05
+    dowel_right = cx/2 - 0.05
+    dowel_bot_z = bot_z_y + d_m
+    ax.plot([dowel_left, dowel_left], [dowel_bot_z, t_actual + 0.6], color='#d35400', linewidth=2.5, linestyle='-', label='Column Dowels')
+    ax.plot([dowel_right, dowel_right], [dowel_bot_z, t_actual + 0.6], color='#d35400', linewidth=2.5, linestyle='-')
+    # Dowel Hooks Outward
+    ax.plot([dowel_left, dowel_left - 0.15], [dowel_bot_z, dowel_bot_z], color='#d35400', linewidth=2.5)
+    ax.plot([dowel_right, dowel_right + 0.15], [dowel_bot_z, dowel_bot_z], color='#d35400', linewidth=2.5)
+
+    # 6. Dimensions and Annotations
+    ax.annotate(f'Cover: {cover_cm}cm', xy=(-B_ft/2 + c_m/2, c_m/2), xytext=(-B_ft/2 - 0.4, 0.05),
+                arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=9)
+    ax.annotate(f'Embed: {embed_cm}cm', xy=(-B_ft/3, e_m/2), xytext=(-B_ft/3 + 0.2, -0.15),
+                arrowprops=dict(facecolor='black', arrowstyle='->'), fontsize=9)
+    
+    # Thickness Dimension
+    ax.plot([B_ft/2 + 0.1, B_ft/2 + 0.1], [0, t_actual], color='black', linewidth=1)
+    ax.plot([B_ft/2 + 0.05, B_ft/2 + 0.15], [0, 0], color='black', linewidth=1)
+    ax.plot([B_ft/2 + 0.05, B_ft/2 + 0.15], [t_actual, t_actual], color='black', linewidth=1)
+    ax.text(B_ft/2 + 0.15, t_actual/2, f"t = {t_actual:.2f} m", va='center', fontsize=10, fontweight='bold')
+    
+    ax.set_xlim(-B_ft/2 - 0.5, B_ft/2 + 0.5)
+    ax.set_ylim(-0.4, t_actual + 0.6)
+    ax.set_title(f'Comprehensive Section Detailing (B = {B_ft:.2f}m, t = {t_actual:.2f}m)', fontsize=12, fontweight='bold')
+    ax.axis('off') # Turn off axes for a clean CAD look
+    ax.legend(loc='upper right', framealpha=0.9, fontsize=9)
+    
     return fig
 
 # =========================================================================
@@ -263,8 +295,7 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # =========================================================================
 # UI SIDEBAR CONFIGURATIONS
 # =========================================================================
-st.title("📐 Enterprise Footing Suite (V7.6 - Complete Version)")
-st.markdown("### Footing Analysis System: Load Combinations, As-Built Analysis & Rebar Detailing")
+st.title("📐 Enterprise Footing Suite (V7.7 - Ultimate Detailing)")
 st.markdown("---")
 
 with st.sidebar:
@@ -325,7 +356,6 @@ with st.sidebar:
     dim_mode = st.radio("Dimensioning Method:", ["Auto-Size", "Manual Override"])
     
     if dim_mode == "Manual Override":
-        st.caption(f"⚠️ Limits: B ≥ {B_min_geometry:.2f} m | L ≥ {L_min_geometry:.2f} m")
         B_input = st.number_input("Total Width X-axis (B, m)", value=float(round(B_min_geometry, 2)), min_value=0.4, step=0.05)
         L_input = st.number_input("Total Length Y-axis (L, m)", value=float(round(L_min_geometry, 2)), min_value=0.4, step=0.05)
         B_ft = max(B_input, B_min_geometry)
@@ -371,10 +401,9 @@ phi_shear, phi_flexure = 0.75, 0.90
 ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 
 # =========================================================================
-# AS-BUILT FIELD SURVEY DATA EDITOR (STEP 1)
+# AS-BUILT FIELD SURVEY DATA EDITOR
 # =========================================================================
 st.markdown("### 📍 1. As-Built Field Survey Analysis")
-st.info("💡 **Dynamic Calculation:** Modifying ΔX or ΔY will immediately update the load distributions and structural diagrams below.")
 
 df_initial = pd.DataFrame({
     'Pile Name': [f"P{i+1}" for i in range(n_piles)],
@@ -395,8 +424,8 @@ cg_actual_y = sum(p[1] for p in piles_actual) / n_piles
 ecc_x, ecc_y = 0.0 - cg_actual_x, 0.0 - cg_actual_y
 
 piles_relative = [(p[0] - cg_actual_x, p[1] - cg_actual_y) for p in piles_actual]
-I_yy_group = sum(p[0]**2 for p in piles_relative)
-I_xx_group = sum(p[1]**2 for p in piles_relative)
+I_yy_group = max(0.001, sum(p[0]**2 for p in piles_relative))
+I_xx_group = max(0.001, sum(p[1]**2 for p in piles_relative))
 
 P_service = DL + LL
 P_ultimate = (factor_dl * DL) + (factor_ll * LL)
@@ -422,13 +451,10 @@ else:
     concrete_vertices = [(v[0] * scale_x, v[1] * scale_y) for v in base_vertices]
     base_area = (math.sqrt(3)/4)*(S_dist**2) + (3*S_dist*E_dist) + (2*math.sqrt(3)*(E_dist**2))
     footing_area = base_area * scale_x * scale_y
-    B_ft = max(v[0] for v in concrete_vertices) - min(v[0] for v in concrete_vertices)
-    L_ft = max(v[1] for v in concrete_vertices) - min(v[1] for v in concrete_vertices)
 
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
-# --- Dynamic Processing with Variable Load Factors ---
 if thickness_mode == "Auto-Optimize":
     d_opt = 0.30
     step_safe = False
@@ -459,156 +485,42 @@ Ms_y_total = Ms_cy + (P_service_total * (-ecc_x))
 pile_service_reactions = []
 for prx, pry in piles_relative:
     R_s = (P_service_total / n_piles) + \
-          (Ms_y_total * prx / I_yy_group if I_yy_group > 0 else 0) + \
-          (Ms_x_total * pry / I_xx_group if I_xx_group > 0 else 0)
+          (Ms_y_total * prx / I_yy_group) + \
+          (Ms_x_total * pry / I_xx_group)
     pile_service_reactions.append(R_s)
 
-# =========================================================================
-# FLEXURAL FACE MOMENT ANALYSIS
-# =========================================================================
+# Check for Uplift to trigger Top Steel
+has_tension = any(r < 0 for r in p_ult_out)
+require_top_steel = has_tension or (t_actual >= 0.60) # Top steel required if thickness >= 60cm or uplift
+
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
-Mu_x_bot = abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
 w_flex_x_top = max(30.0, get_polygon_section_width_at_y(cy/2, concrete_vertices) * 100)
-w_flex_x_bot = max(30.0, get_polygon_section_width_at_y(-cy/2, concrete_vertices) * 100)
-
-n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top = design_rebar_by_axis(Mu_x_top, w_flex_x_top, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
-n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot = design_rebar_by_axis(Mu_x_bot, w_flex_x_bot, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
-
-if As_req_x_top >= As_req_x_bot:
-    Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_top, w_flex_x_top, n_bars_x_top, sp_x_top, crash_x_top, As_req_x_top
-else:
-    Mu_x_face, w_flex_x, n_main_bars_x, sp_main_x, crash_fx, As_req_x = Mu_x_bot, w_flex_x_bot, n_bars_x_bot, sp_x_bot, crash_x_bot, As_req_x_bot
+n_main_bars_x, sp_main_x, _, As_req_x = design_rebar_by_axis(Mu_x_top, w_flex_x_top, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
 Mu_y_right = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
-Mu_y_left = abs(sum(p_ult_out[i] * (-cx/2 - p[0]) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
 w_flex_y_right = max(30.0, get_polygon_section_length_at_x(cx/2, concrete_vertices) * 100)
-w_flex_y_left = max(30.0, get_polygon_section_length_at_x(-cx/2, concrete_vertices) * 100)
+n_main_bars_y, sp_main_y, _, As_req_y = design_rebar_by_axis(Mu_y_right, w_flex_y_right, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
-n_bars_y_right, sp_y_right, crash_y_right, As_req_y_right = design_rebar_by_axis(Mu_y_right, w_flex_y_right, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
-n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left = design_rebar_by_axis(Mu_y_left, w_flex_y_left, (d_actual - bar_dia/1000)*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
-
-if As_req_y_right >= As_req_y_left:
-    Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_right, w_flex_y_right, n_bars_y_right, sp_y_right, crash_y_right, As_req_y_right
-else:
-    Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_left, w_flex_y_left, n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left
-
-P_u_total = P_ultimate + factor_dl * (w_s_footing + W_soil)
-Mu_x_total = Mu_cx + (P_u_total * (-ecc_y))
-Mu_y_total = Mu_cy + (P_u_total * (-ecc_x))
-
-b1_box, b2_box = cx + d_actual, cy + d_actual
-b_0_len = 2 * (b1_box + b2_box)
-cut_y_pos = cy/2 + d_actual
-bw_y_width = get_polygon_section_width_at_y(cut_y_pos, concrete_vertices)
-
-Vu_punch_kg = float(sum(max(0.0, float(p)) for p in p_ult_out)) * 1000.0
-Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_actual[idx][1] >= cut_y_pos) * 1000.0
-
-# -------------------------------------------------------------------------
-# STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
-# -------------------------------------------------------------------------
-st.markdown("### 🏗️ Step 2: Factored Axial Loads & Combined Forces")
-st.markdown(f"Total factored axial load acting on the pile group center, incorporating custom load factors ($\gamma_{{DL}} = {factor_dl}$, $\gamma_{{LL}} = {factor_ll}$):")
-
-st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + \gamma_{DL} \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
-st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + {factor_dl} \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
-
-st.markdown("#### Factored Moments Incorporating As-Built Eccentricities:")
-st.markdown(r"$$\text{Governing Equation (X-Axis): } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
-st.markdown(f"$$M_{{ux,\\text{{total}}}} = {Mu_cx:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_y:.3f})] = \\mathbf{{{Mu_x_total:.2f}}} \\text{{ ton-m}}$$")
-
-st.markdown(r"$$\text{Governing Equation (Y-Axis): } M_{uy,\text{total}} = M_{uy,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta X)]$$")
-st.markdown(f"$$M_{{uy,\\text{{total}}}} = {Mu_cy:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_x:.3f})] = \\mathbf{{{Mu_y_total:.2f}}} \\text{{ ton-m}}$$")
-
+# =========================================================================
+# STEP 6: DUAL VISUALIZATION (THE 100X BETTER VERSION)
+# =========================================================================
 st.markdown("---")
-
-# -------------------------------------------------------------------------
-# STEP 3: PILE GROUP MECHANICS (PILE-BY-PILE ANALYSIS)
-# -------------------------------------------------------------------------
-st.markdown("### 🪵 Step 3: Pile Group Mechanics & Stress Distribution")
-st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{n} \pm \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
-
-for i in range(n_piles):
-    xi = piles_relative[i][0]
-    yi = piles_relative[i][1]
-    
-    st.markdown(f"**🔴 Pile Identifier: P{i+1}** ($x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
-    st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}} = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
-    
-    if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap:
-        st.caption(f"Status P{i+1}: ✅ Safe (Working Load = {pile_service_reactions[i]:.2f} tons / Allowable = {pile_cap} tons)")
-    else:
-        st.error(f"Status P{i+1}: ❌ Overstressed (Working Load = {pile_service_reactions[i]:.2f} tons limits exceeded!)")
-
-st.markdown("---")
-
-# -------------------------------------------------------------------------
-# STEP 4: CRITICAL SHEAR STRESS ANALYSIS
-# -------------------------------------------------------------------------
-st.markdown("### 📐 Step 4: Critical Shear Stress Analysis")
-safe_b0 = b_0_len * 100 if b_0_len > 0 else 1.0
-safe_d = d_actual * 100 if d_actual > 0 else 1.0
-safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
-
-st.markdown("**A) Two-Way Punching Shear Check ($d/2$ from column face):**")
-st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
-st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
-if v_up <= v_cp: st.success(f"✅ **Safe:** Punching shear stress is within allowable capacity limits.")
-else: st.error(f"❌ **Unsafe:** Punching stress exceeds capacity! Increase footing thickness.")
-
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
-st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
-st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
-if v_uwb <= v_cwb: st.success(f"✅ **Safe:** Wide-beam shear is within safe margins.")
-else: st.error(f"❌ **Unsafe:** One-way shear failure risk detected!")
-
-st.markdown("---")
-
-# -------------------------------------------------------------------------
-# STEP 5: FLEXURAL DESIGN & REBAR LAYOUT
-# -------------------------------------------------------------------------
-st.markdown("### 🥩 Step 5: Flexural Design and Rebar Layout")
-df_rebar = pd.DataFrame({
-    "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
-    "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
-    "Required As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
-    "Provided Rebar Spec": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
-    "Calculated Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
-})
-st.dataframe(df_rebar, use_container_width=True, hide_index=True)
-
-l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
-available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
-st.markdown(f"$$L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
-if available_length_x >= l_d_required:
-    st.success(f"✅ **Pass:** Available length ({available_length_x:.1f} cm) ≥ Required $L_d$ ({l_d_required:.1f} cm).")
-else:
-    st.warning(f"⚠️ **Hook Required:** Available length ({available_length_x:.1f} cm) < {l_d_required:.1f} cm. 90-degree hooks must be detailed.")
-
-st.markdown("---")
-
-# -------------------------------------------------------------------------
-# STEP 6: DUAL VISUALIZATION (2D MATPLOTLIB PLAN, SECTION & 3D INTERACTIVE MESH)
-# -------------------------------------------------------------------------
-st.markdown("### 🗺️ Step 6: Engineering Visual Twin Plots (2D, Section & 3D Twins)")
-st.markdown("วิเคราะห์ตำแหน่งเสาตอม่อ ขอบเขตโครงสร้างฐานราก และพิกัดตำแหน่งจริงพร้อมแสดงผลการเสริมเหล็ก")
+st.markdown("### 🗺️ Step 6: Engineering Visual Twin Plots (Ultimate Detailing)")
 
 col_plot1, col_plot2 = st.columns(2)
 
 with col_plot1:
-    st.markdown("#### 📐 A) 2D Plan View (Matplotlib Plot)")
+    st.markdown("#### 📐 A) 2D Plan View")
     fig_2d = generate_2d_plan_view(concrete_vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l)
     st.pyplot(fig_2d)
 
 with col_plot2:
-    st.markdown("#### 🟥 B) 2D Rebar Detailing Section View")
-    fig_rebar = generate_rebar_detailing_view(t_actual, B_ft, concrete_cover_cm, pile_embed_cm, bar_dia, n_main_bars_x, sp_main_x, cx, cy)
+    st.markdown("#### 🟥 B) 2D Rebar Detailing Section View (V7.7 Ultra)")
+    if require_top_steel:
+        st.info(f"💡 **Top Steel Triggered:** {'Due to Pile Uplift (Tension)' if has_tension else f'Due to Footing Thickness (t = {t_actual}m ≥ 0.60m) for Shrinkage/Temperature control.'}")
+    fig_rebar = generate_rebar_detailing_view(t_actual, B_ft, concrete_cover_cm, pile_embed_cm, bar_dia, n_main_bars_x, sp_main_x, cx, cy, require_top_steel)
     st.pyplot(fig_rebar)
 
 st.markdown("#### 🧊 C) 3D Interactive Mesh")
-fig_3d = generate_3d_mesh(
-    tuple(concrete_vertices), t_actual, cx, cy, 
-    tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100
-)
+fig_3d = generate_3d_mesh(tuple(concrete_vertices), t_actual, cx, cy, tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100)
 st.plotly_chart(fig_3d, use_container_width=True)
