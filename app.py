@@ -463,128 +463,128 @@ Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_ac
 pile_ur = max(pile_service_reactions) / pile_cap if pile_cap > 0 else 1.0
 punching_ur = v_up / v_cp if v_cp > 0 else 1.0
 wide_beam_ur = v_uwb / v_cwb if v_cwb > 0 else 1.0
-    
-    # -------------------------------------------------------------------------
-    # STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
-    # -------------------------------------------------------------------------
-    st.markdown("### 🏗️ Step 2: Factored Axial Loads & Combined Forces")
-    st.markdown("Total factored axial load acting on the pile group center, including the structural dead/live loads, footing self-weight, and soil surcharge load factors (Load Factor = 1.2 for structural weights):")
-    
-    st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
-    st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + 1.2 \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
-    
-    st.markdown("#### Factored Moments Incorporating As-Built Eccentricities:")
-    st.markdown(r"$$\text{Governing Equation (X-Axis): } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
-    st.markdown(f"$$M_{{ux,\\text{{total}}}} = {Mu_cx:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_y:.3f})] = \\mathbf{{{Mu_x_total:.2f}}} \\text{{ ton-m}}$$")
-    
-    st.markdown(r"$$\text{Governing Equation (Y-Axis): } M_{uy,\text{total}} = M_{uy,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta X)]$$")
-    st.markdown(f"$$M_{{uy,\\text{{total}}}} = {Mu_cy:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_x:.3f})] = \\mathbf{{{Mu_y_total:.2f}}} \\text{{ ton-m}}$$")
-    
-    st.markdown("---")
-    
-    # -------------------------------------------------------------------------
-    # STEP 3: PILE GROUP MECHANICS (PILE-BY-PILE ANALYSIS)
-    # -------------------------------------------------------------------------
-    st.markdown("### 🪵 Step 3: Pile Group Mechanics & Stress Distribution")
-    st.markdown("Individual pile reactions are computed using linear elastic structural mechanics based on the As-Built survey coordinate mappings.")
-    st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{n} \pm \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
-    
-    col_v1, col_v2 = st.columns(2)
-    with col_v1:
-        st.markdown(f"""
-        **Geometric Sectional Properties:**
-        * Number of piles ($n$): `{n_piles}` piles
-        * Pile Profile Config: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
-        * Group Inertia $I_{{xx}}$: `{I_xx_group:.4f}` m²
-        * Group Inertia $I_{{yy}}$: `{I_yy_group:.4f}` m²
-        * Eccentricity ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
-        """)
-    with col_v2:
-        st.markdown(f"""
-        **Combined External Forces (Factored):**
-        * Total Ult. Load ($P_{{u,\\text{{total}}}}$): `{P_u_total:.2f}` tons
-        * Combined Moment $M_{{ux}}$: `{Mu_x_total:.2f}` ton-m
-        * Combined Moment $M_{{uy}}$: `{Mu_y_total:.2f}` ton-m
-        """)
 
-    st.markdown("#### Detailed Mathematical Substitution per Pile:")
-    for i in range(n_piles):
-        xi = piles_relative[i][0]
-        yi = piles_relative[i][1]
-        
-        term_p = P_u_total / n_piles
-        term_my = (Mu_y_total * xi) / I_yy_group if I_yy_group > 0 else 0.0
-        term_mx = (Mu_x_total * yi) / I_xx_group if I_xx_group > 0 else 0.0
-        
-        st.markdown(f"**🔴 Pile Identifier: P{i+1}** (As-Built Offsets: $x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
-        st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}}$$")
-        st.markdown(f"$$R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
-        st.markdown(f"* **Service Working Load:** Status Check = `{round(pile_service_reactions[i], 2)}` tons (Allowable Cap = `{pile_cap}` tons)")
-        
-        if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap:
-            st.caption(f"Status P{i+1}: ✅ Pass (Within Safe Bearing Limits)")
-        else:
-            st.error(f"Status P{i+1}: ❌ Overstressed (Exceeds Geotechnical Capacity Limits)")
-        st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+# -------------------------------------------------------------------------
+# STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
+# -------------------------------------------------------------------------
+st.markdown("### 🏗️ Step 2: Factored Axial Loads & Combined Forces")
+st.markdown("Total factored axial load acting on the pile group center, including the structural dead/live loads, footing self-weight, and soil surcharge load factors (Load Factor = 1.2 for structural weights):")
 
-    st.markdown("---")
-    
-    # -------------------------------------------------------------------------
-    # STEP 4: CRITICAL SHEAR STRESS ANALYSIS
-    # -------------------------------------------------------------------------
-    st.markdown("### 📐 Step 4: Critical Shear Stress Analysis")
-    safe_b0 = b_0_len * 100 if b_0_len > 0 else 1.0
-    safe_d = d_actual * 100 if d_actual > 0 else 1.0
-    safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
-    
-    st.markdown("**A) Two-Way Punching Shear Check ($d/2$ from column face):**")
-    st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{punch}}}{b_0 \cdot d}$$")
-    st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
-    st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
-    
-    if v_up <= v_cp: 
-        st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_up:.2f} $\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
-    else: 
-        st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc). Footing thickness must be increased!")
+st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
+st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + 1.2 \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
-    st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{wide-beam}}}{b_w \cdot d}$$")
-    st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
-    st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
-    
-    if v_uwb <= v_cwb: 
-        st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_uwb:.2f} $\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
-    else: 
-        st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc). One-way shear structural failure risk detected!")
+st.markdown("#### Factored Moments Incorporating As-Built Eccentricities:")
+st.markdown(r"$$\text{Governing Equation (X-Axis): } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
+st.markdown(f"$$M_{{ux,\\text{{total}}}} = {Mu_cx:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_y:.3f})] = \\mathbf{{{Mu_x_total:.2f}}} \\text{{ ton-m}}$$")
 
-    st.markdown("---")
-    
-    # -------------------------------------------------------------------------
-    # STEP 5: FLEXURAL DESIGN & REBAR LAYOUT
-    # -------------------------------------------------------------------------
-    st.markdown("### 🥩 Step 5: Flexural Design and Rebar Layout")
-    st.markdown("Bending moments are evaluated at the critical face of the column stub to calculate the required reinforcement area.")
-    
-    df_rebar = pd.DataFrame({
-        "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
-        "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
-        "Required As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
-        "Provided Rebar Spec": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
-        "Calculated Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
-    })
-    st.dataframe(df_rebar, use_container_width=True, hide_index=True)
+st.markdown(r"$$\text{Governing Equation (Y-Axis): } M_{uy,\text{total}} = M_{uy,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta X)]$$")
+st.markdown(f"$$M_{{uy,\\text{{total}}}} = {Mu_cy:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_x:.3f})] = \\mathbf{{{Mu_y_total:.2f}}} \\text{{ ton-m}}$$")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**C) Reinforcement Development Length Check ($L_d$):**")
-    l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
-    available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
+st.markdown("---")
+
+# -------------------------------------------------------------------------
+# STEP 3: PILE GROUP MECHANICS (PILE-BY-PILE ANALYSIS)
+# -------------------------------------------------------------------------
+st.markdown("### 🪵 Step 3: Pile Group Mechanics & Stress Distribution")
+st.markdown("Individual pile reactions are computed using linear elastic structural mechanics based on the As-Built survey coordinate mappings.")
+st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{n} \pm \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
+
+col_v1, col_v2 = st.columns(2)
+with col_v1:
+    st.markdown(f"""
+    **Geometric Sectional Properties:**
+    * Number of piles ($n$): `{n_piles}` piles
+    * Pile Profile Config: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
+    * Group Inertia $I_{{xx}}$: `{I_xx_group:.4f}` m²
+    * Group Inertia $I_{{yy}}$: `{I_yy_group:.4f}` m²
+    * Eccentricity ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
+    """)
+with col_v2:
+    st.markdown(f"""
+    **Combined External Forces (Factored):**
+    * Total Ult. Load ($P_{{u,\\text{{total}}}}$): `{P_u_total:.2f}` tons
+    * Combined Moment $M_{{ux}}$: `{Mu_x_total:.2f}` ton-m
+    * Combined Moment $M_{{uy}}$: `{Mu_y_total:.2f}` ton-m
+    """)
+
+st.markdown("#### Detailed Mathematical Substitution per Pile:")
+for i in range(n_piles):
+    xi = piles_relative[i][0]
+    yi = piles_relative[i][1]
     
-    st.markdown(r"$$\text{Governing Equation: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
-    st.markdown(f"$$\\text{{Substitution: }} L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
-    st.markdown(f"* **Available Embedment Length within Footing Geometry:** `{available_length_x:.1f}` cm")
+    term_p = P_u_total / n_piles
+    term_my = (Mu_y_total * xi) / I_yy_group if I_yy_group > 0 else 0.0
+    term_mx = (Mu_x_total * yi) / I_xx_group if I_xx_group > 0 else 0.0
     
-    if available_length_x >= l_d_required:
-        st.success(f"✅ **Pass:** Available embedment length ({available_length_x:.1f} cm) exceeds required development length ({l_d_required:.1f} cm). Straight bar extensions are structurally sufficient.")
+    st.markdown(f"**🔴 Pile Identifier: P{i+1}** (As-Built Offsets: $x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
+    st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}}$$")
+    st.markdown(f"$$R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
+    st.markdown(f"* **Service Working Load:** Status Check = `{round(pile_service_reactions[i], 2)}` tons (Allowable Cap = `{pile_cap}` tons)")
+    
+    if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap:
+        st.caption(f"Status P{i+1}: ✅ Pass (Within Safe Bearing Limits)")
     else:
-        st.warning(f"⚠️ **Warning:** Insufficient embedment length ({available_length_x:.1f} cm < {l_d_required:.1f} cm). **Standard 90-degree hooks must be detailed** at both bar ends to ensure tension anchor compliance.")
+        st.error(f"Status P{i+1}: ❌ Overstressed (Exceeds Geotechnical Capacity Limits)")
+    st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# -------------------------------------------------------------------------
+# STEP 4: CRITICAL SHEAR STRESS ANALYSIS
+# -------------------------------------------------------------------------
+st.markdown("### 📐 Step 4: Critical Shear Stress Analysis")
+safe_b0 = b_0_len * 100 if b_0_len > 0 else 1.0
+safe_d = d_actual * 100 if d_actual > 0 else 1.0
+safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
+
+st.markdown("**A) Two-Way Punching Shear Check ($d/2$ from column face):**")
+st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{punch}}}{b_0 \cdot d}$$")
+st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
+st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
+
+if v_up <= v_cp: 
+    st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_up:.2f} $\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
+else: 
+    st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc). Footing thickness must be increased!")
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
+st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{wide-beam}}}{b_w \cdot d}$$")
+st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
+st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
+
+if v_uwb <= v_cwb: 
+    st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_uwb:.2f} $\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
+else: 
+    st.error(f"❌ **Unsafe:** $v_u > \phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc). One-way shear structural failure risk detected!")
+
+st.markdown("---")
+
+# -------------------------------------------------------------------------
+# STEP 5: FLEXURAL DESIGN & REBAR LAYOUT
+# -------------------------------------------------------------------------
+st.markdown("### 🥩 Step 5: Flexural Design and Rebar Layout")
+st.markdown("Bending moments are evaluated at the critical face of the column stub to calculate the required reinforcement area.")
+
+df_rebar = pd.DataFrame({
+    "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
+    "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
+    "Required As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
+    "Provided Rebar Spec": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
+    "Calculated Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
+})
+st.dataframe(df_rebar, use_container_width=True, hide_index=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("**C) Reinforcement Development Length Check ($L_d$):**")
+l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
+available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
+
+st.markdown(r"$$\text{Governing Equation: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
+st.markdown(f"$$\\text{{Substitution: }} L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
+st.markdown(f"* **Available Embedment Length within Footing Geometry:** `{available_length_x:.1f}` cm")
+
+if available_length_x >= l_d_required:
+    st.success(f"✅ **Pass:** Available embedment length ({available_length_x:.1f} cm) exceeds required development length ({l_d_required:.1f} cm). Straight bar extensions are structurally sufficient.")
+else:
+    st.warning(f"⚠️ **Warning:** Insufficient embedment length ({available_length_x:.1f} cm < {l_d_required:.1f} cm). **Standard 90-degree hooks must be detailed** at both bar ends to ensure tension anchor compliance.")
