@@ -50,7 +50,6 @@ def point_to_segment_dist(px, py, x1, y1, x2, y2):
     return math.sqrt((px - (x1 + t * dx))**2 + (py - (y1 + t * dy))**2)
 
 def get_polygon_section_width_at_y(target_y, vertices):
-    """คำนวณหาความกว้างแนวนอน (แกน X) ของรูปทรงฐานราก ณ ตำแหน่งระดับ Y ที่กำหนด"""
     intersections = []
     n = len(vertices)
     for i in range(n):
@@ -65,25 +64,6 @@ def get_polygon_section_width_at_y(target_y, vertices):
                 intersections.append(x_interp)
             else:
                 intersections.extend([x1, x2])
-    if len(intersections) < 2: return 0.0
-    return max(intersections) - min(intersections)
-
-def get_polygon_section_length_at_x(target_x, vertices):
-    """คำนวณหาความยาวแนวตั้ง (แกน Y) ของรูปทรงฐานราก ณ ตำแหน่งแนว X ที่กำหนด"""
-    intersections = []
-    n = len(vertices)
-    for i in range(n):
-        p1 = vertices[i]
-        p2 = vertices[(i + 1) % n]
-        x1, y1 = p1[0], p1[1]
-        x2, y2 = p2[0], p2[1]
-        if min(x1, x2) <= target_x <= max(x1, x2):
-            if abs(x2 - x1) > 1e-6:
-                t = (target_x - x1) / (x2 - x1)
-                y_interp = y1 + t * (y2 - y1)
-                intersections.append(y_interp)
-            else:
-                intersections.extend([y1, y2])
     if len(intersections) < 2: return 0.0
     return max(intersections) - min(intersections)
 
@@ -118,115 +98,83 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
     ax.grid(True, linestyle=':', alpha=0.6)
     return fig
 
-# 🚀 ULTIMATE REBAR DETAILING SECTION VIEW (V7.8 Ultra)
 def generate_rebar_detailing_view(t_actual, B_ft, cover_cm, embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel):
     fig, ax = plt.subplots(figsize=(10, 5))
-    
-    c_m = cover_cm / 100
-    e_m = embed_cm / 100
-    d_m = bar_dia / 1000
-    # ปรับปรุงระยะงอฉากให้สมจริง
+    c_m, e_m, d_m = cover_cm / 100, embed_cm / 100, bar_dia / 1000
     hook_len = min(0.30, max(0.15, t_actual - 2*c_m - e_m))
     
-    # 1. Base Outlines (Elevation View)
     footing = patches.Rectangle((-B_ft/2, 0), B_ft, t_actual, linewidth=2, edgecolor='#2c3e50', facecolor='#eaeded')
     ax.add_patch(footing)
-    
     col_stub = patches.Rectangle((-cx/2, t_actual), cx, 0.50, linewidth=2, edgecolor='#7e1e1e', facecolor='#f2d7d5')
     ax.add_patch(col_stub)
     
-    # 2. Piles
     p_w = 0.30
     pile1 = patches.Rectangle((-B_ft/3 - p_w/2, -0.3), p_w, 0.3 + e_m, facecolor='#bdc3c7', edgecolor='#34495e', linewidth=1.5)
     pile2 = patches.Rectangle((B_ft/3 - p_w/2, -0.3), p_w, 0.3 + e_m, facecolor='#bdc3c7', edgecolor='#34495e', linewidth=1.5)
     ax.add_patch(pile1)
     ax.add_patch(pile2)
     
-    # 3. Bottom Rebar Set ( Main X-Bars เส้นยาว, Transverse Y-Dots จุดวงกลม)
     bot_z_x = e_m + c_m + (d_m/2)
     bot_z_y = bot_z_x + d_m
-    left_x = -B_ft/2 + c_m
-    right_x = B_ft/2 - c_m
+    left_x, right_x = -B_ft/2 + c_m, B_ft/2 - c_m
     
-    # เส้นเหล็กแกนล่าง (Main X)
     ax.plot([left_x, right_x], [bot_z_x, bot_z_x], color='#c0392b', linewidth=3, label=f'เหล็กล่าง Main DB{bar_dia}')
     ax.plot([left_x, left_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=3)
     ax.plot([right_x, right_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=3)
     
-    # จุดเหล็กตามขวางล่าง (Transverse Y)
-    dot_count = min(n_bars_x, 20) # จำกัดจุดเพื่อความสวยงาม
+    dot_count = min(n_bars_x, 20)
     x_dots = np.linspace(left_x + c_m, right_x - c_m, dot_count)
-    for rx in x_dots:
-        ax.plot(rx, bot_z_y, 'o', color='#2c3e50', markersize=5)
+    for rx in x_dots: ax.plot(rx, bot_z_y, 'o', color='#2c3e50', markersize=5)
         
-    # 4. Top Rebar Set (ตะแกรงบน - แสดงถ้า require_top_steel = True)
     if require_top_steel:
         top_z_x = t_actual - c_m - (d_m/2)
         top_z_y = top_z_x - d_m
-        
         ax.plot([left_x, right_x], [top_z_x, top_z_x], color='#2980b9', linewidth=2.5, linestyle='-', label='เหล็กบน (กันร้าว/รับแรงถอน)')
         ax.plot([left_x, left_x], [top_z_x, top_z_x - hook_len], color='#2980b9', linewidth=2.5)
         ax.plot([right_x, right_x], [top_z_x, top_z_x - hook_len], color='#2980b9', linewidth=2.5)
-        
-        for rx in x_dots:
-            ax.plot(rx, top_z_y, 'o', color='#34495e', markersize=4)
+        for rx in x_dots: ax.plot(rx, top_z_y, 'o', color='#34495e', markersize=4)
 
-    # 5. Column Dowels (เหล็กหนวดกุ้งล้วงฐานราก)
-    dowel_left = -cx/2 + 0.05
-    dowel_right = cx/2 - 0.05
-    dowel_bot_z = bot_z_y + d_m # ล้วงลงไปวางบนตะแกรงล่าง
+    dowel_left, dowel_right = -cx/2 + 0.05, cx/2 - 0.05
+    dowel_bot_z = bot_z_y + d_m
     
     ax.plot([dowel_left, dowel_left], [dowel_bot_z, t_actual + 0.6], color='#d35400', linewidth=2.5, linestyle='-', label='เหล็กแกนเสาล้วงฐานราก')
     ax.plot([dowel_right, dowel_right], [dowel_bot_z, t_actual + 0.6], color='#d35400', linewidth=2.5, linestyle='-')
-    # งอฉากหนวดกุ้ง (L-Hook)
     ax.plot([dowel_left, dowel_left + 0.15], [dowel_bot_z, dowel_bot_z], color='#d35400', linewidth=2.5)
     ax.plot([dowel_right, dowel_right - 0.15], [dowel_bot_z, dowel_bot_z], color='#d35400', linewidth=2.5)
 
-    # 6. เส้นบอกระยะแบบ Blueprint
-    # covering
     ax.plot([-B_ft/2 - 0.05, left_x], [bot_z_x, bot_z_x], color='black', linewidth=1)
     ax.text(-B_ft/2 - 0.08, bot_z_x, f'Cov. {cover_cm}cm', ha='right', fontsize=8)
-    # pile embedment
     ax.plot([-B_ft/3 + 0.1, -B_ft/3 + 0.1], [0, e_m], color='black', linewidth=1)
     ax.text(-B_ft/3 + 0.12, e_m/2, f'Embed. {embed_cm}cm', va='center', fontsize=8)
     
-    # 7. Labels
     ax.text(0, -0.4, f'หน้าตัด B = {B_ft:.2f} m', ha='center', fontsize=11, fontweight='bold')
     ax.text(right_x + 0.2, t_actual, f't = {t_actual:.2f} m', fontsize=10, fontweight='bold')
     
     ax.set_xlim(-B_ft/2 - 0.5, B_ft/2 + 0.5)
     ax.set_ylim(-0.5, t_actual + 0.7)
     ax.set_title(f'รูปขยายการเสริมเหล็ก V7.8 Ultra ({n_bars_x}-DB{bar_dia} @ {sp_x:.0f} cm)', fontsize=12, fontweight='bold')
-    ax.axis('off') # ปิดแกนเพื่อความสวยงามแบบ CAD
+    ax.axis('off')
     ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
-    
     return fig
 
-# =========================================================================
-# CORE ENGINEERING LOGIC (COMPLETE)
-# =========================================================================
-def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, footing_shape, b_ft, vertices, factor_dl, phi_s=0.75):
-    """คำนวณประเมินแรงเฉือนทั้งหมด (Punching & Wide Beam) โดยใช้ตัวคูณโหลด Dynamic"""
+def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, footing_shape, b_ft, vertices, factor_dl, phi_s=0.75):
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
-    # โมเมนต์รวมรวมผลจากระยะเยื้อง As-Built
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
     p_ult_reactions = []
     for prx, pry in piles_rel:
-        # สมการ Elastic Mechanics ฐานรากตอม่อเยื้องศูนย์
-        R_u = (P_total_factored / n_piles) + \
+        R_u = (P_total_factored / n_piles_act) + \
               (Mu_y_total * prx / I_yy if I_yy > 0.001 else 0) + \
               (Mu_x_total * pry / I_xx if I_xx > 0.001 else 0)
         p_ult_reactions.append(R_u)
         
     b1_box, b2_box = cx + eval_d, cy + eval_d
-    b_0 = 2 * (b1_box + b2_box) # เส้นรอบวงวิกฤตแรงเฉือนทะลุ
+    b_0 = 2 * (b1_box + b2_box)
     A_punching_cm2 = b_0 * eval_d * 10000
     
-    # 1. Punching Shear Check
     V_u_punching_kg = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if abs(px) > (cx/2 + eval_d/2) or abs(py) > (cy/2 + eval_d/2))
     v_u_punching_stress = V_u_punching_kg / A_punching_cm2 if A_punching_cm2 > 0 else 0.0
     
@@ -234,37 +182,28 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     alpha_s = 40 if col_pos == "Interior" else (30 if col_pos == "Edge" else 20)
     v_c_allow_punching = phi_s * min(0.27*(2 + 4/beta_ratio)*math.sqrt(fc_prime), 0.27*(alpha_s*(eval_d*100)/(b_0*100) + 2)*math.sqrt(fc_prime), 1.06*math.sqrt(fc_prime))
     
-    # 2. Wide-Beam Shear Check (Y-direction)
-    cut_y_pos = cy/2 + eval_d # หน้าตัดวิกฤตห่างจากหน้าเสาระยะ d
+    cut_y_pos = cy/2 + eval_d
     V_u_wb = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if py >= cut_y_pos)
-    bw_y = get_polygon_section_width_at_y(cut_y_pos, vertices) * 100 # ความกว้างหน้าตัดจริง ณ จุดตัด
+    bw_y = get_polygon_section_width_at_y(cut_y_pos, vertices) * 100
     
     v_u_wb_max = V_u_wb / (bw_y * eval_d * 100) if (bw_y > 0 and eval_d > 0) else 0
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
     
-    # ตัดสินความปลอดภัย: ผ่านทั้งคู่
     is_safe = (v_u_punching_stress <= v_c_allow_punching) and (v_u_wb_max <= v_c_allow_wb)
-    
     return is_safe, v_u_punching_stress, v_c_allow_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions
 
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area):
-    """ออกแบบเหล็กเสริมรับแรงดัด WSD ตามหน้าตัด Mu"""
     width_cm = max(width_cm, 30.0)
-    As_min = 0.0018 * width_cm * t_cm # เหล็กกันร้าวขั้นต่ำ ACI
-    
+    As_min = 0.0018 * width_cm * t_cm
     if Mu_ton_m <= 0 or d_cm <= 0:
-        # ไม่มีการดัด ใช้เหล็กขั้นต่ำ
         n_bars = max(math.ceil(As_min / ab_area), 4)
         spacing = math.floor((width_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
         return n_bars, min(spacing, 45.0), False, As_min
         
     Mu_kg_cm = Mu_ton_m * 1000 * 100
     Rn = Mu_kg_cm / (phi_flex * width_cm * d_cm**2)
-    beta_1 = 0.85 if fc_prime <= 280 else max(0.65, 0.85 - 0.05 * (fc_prime - 280) / 70)
-    
-    # คำนวณ Rho
     val_sqrt = 1 - (2 * Rn) / (0.85 * fc_prime)
-    if val_sqrt < 0: return 0, 0, True, 0.0 # หน้าตัดเล็กเกินไปสำหรับแรงดัด
+    if val_sqrt < 0: return 0, 0, True, 0.0
     rho = (0.85 * fc_prime / fy) * (1 - math.sqrt(val_sqrt))
     
     As_req = max(rho * width_cm * d_cm, As_min)
@@ -274,7 +213,6 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
 
 @st.cache_data(show_spinner=False)
 def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tuple, pile_shape, pile_w, pile_l, embed_m):
-    """สร้างโมเดล 3D Interactive (Plotly Mesh)"""
     concrete_vertices = list(concrete_vertices_tuple)
     piles_actual = list(piles_actual_tuple)
     
@@ -299,15 +237,12 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
         for v in vertices: fig.add_trace(go.Scatter3d(x=[v[0], v[0]], y=[v[1], v[1]], z=[z_start, z_end], mode='lines', line=dict(color=line_color, width=2), showlegend=False))
 
     fig_3d = go.Figure()
-    # Footing body
     fig_3d.add_trace(create_3d_prism_trace(concrete_vertices, 0, t_actual, '#2ecc71', 0.5, 'คอนกรีตฐานราก'))
     draw_3d_wireframe_lines(fig_3d, concrete_vertices, 0, t_actual)
     
-    # Column
     column_vertices = [(-cx/2, -cy/2), (cx/2, -cy/2), (cx/2, cy/2), (-cx/2, cy/2)]
     fig_3d.add_trace(create_3d_prism_trace(column_vertices, t_actual, t_actual + 0.50, '#e74c3c', 0.7, 'เสาตอม่อ'))
     
-    # Piles
     for idx, (px, py) in enumerate(piles_actual):
         p_w_3d = 0.30
         p_nodes = [(-p_w_3d/2 + px, -p_w_3d/2 + py), (p_w_3d/2 + px, -p_w_3d/2 + py),
@@ -323,8 +258,6 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 with st.sidebar:
     st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ")
     footing_shape_type = st.selectbox("รูปทรงทางเรขาคณิตฐานราก:", ["Truncated Triangular Footing", "Rectangular Footing"], index=1)
-    
-    # 🔥 FIXED: เพิ่มตัวแปร col_position ที่หายไป กลับเข้า UI
     col_position = st.selectbox("ตำแหน่งเสาตอม่อ (Column Position):", ["Interior", "Edge", "Corner"], index=0)
     
     st.subheader("🛠️ User-Defined Load Combination Factors")
@@ -334,24 +267,21 @@ with st.sidebar:
     st.subheader("1. การตั้งค่าเสาเข็มและพิกัดAs-Built")
     pile_shape = st.selectbox("รูปทรงเสาเข็ม:", ["Circular Pile", "Square/Rectangular Pile"], index=0)
     pile_dia = st.number_input("เส้นผ่านศูนย์กลาง/ความกว้างเสาเข็ม (ม.)", value=0.30, min_value=0.15)
-    pile_w = pile_dia; pile_l = pile_dia # Square pile assumption
+    pile_w = pile_dia; pile_l = pile_dia 
 
-    n_piles = st.selectbox("จำนวนเสาเข็มในกลุ่ม:", [2, 3, 4, 5, 6, 8, 9], index=2) # Default 4 piles
+    n_piles = st.selectbox("จำนวนเสาเข็มในกลุ่ม:", [2, 3, 4, 5, 6, 8, 9], index=2) 
     
     pile_cap = st.number_input("กำลังรับแรงอัดที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=30.0)
     pile_tension_cap = st.number_input("กำลังรับแรงถอนที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=10.0)
     
-    # ระยะห่างเข็ม (S) และระยะขอบ (E)
     S_dist = 3.0 * pile_w
-    E_dist = 0.40 # ระยะขอบเข็มขั้นต่ำ
+    E_dist = 0.40 
 
-    # กำหนดพิกัดเข็มอุดมคติ (Ideal)
     if footing_shape_type == "Rectangular Footing":
         if n_piles == 2: piles_ideal = [(-S_dist/2, 0), (S_dist/2, 0)]
         elif n_piles == 4: piles_ideal = [(-S_dist/2, -S_dist/2), (S_dist/2, -S_dist/2),
                                           (-S_dist/2, S_dist/2), (S_dist/2, S_dist/2)]
-        else: piles_ideal = [(0,0)] * n_piles # Simplified for this Complete Code output
-        
+        else: piles_ideal = [(0,0)] * n_piles 
         B_min_geometry = S_dist + 2*E_dist
         L_min_geometry = S_dist + 2*E_dist
     else:
@@ -361,7 +291,9 @@ with st.sidebar:
                        (S_dist / 2, -S_dist / (2 * math.sqrt(3)))]
         B_min_geometry, L_min_geometry = S_dist + 2*E_dist, S_dist + 2*E_dist
 
-    # UI กำหนดขนาดฐานราก (B x L)
+    # 🔥 FIX: บังคับอัปเดต n_piles ให้ตรงกับจำนวนพิกัดเข็มจริงเสมอ ป้องกัน Pandas ValueError
+    n_piles = len(piles_ideal) 
+
     dim_mode = st.radio("โหมดกำหนดขนาดฐานราก:", ["Auto-Size", "Manual Override"])
     if dim_mode == "Manual Override":
         B_input = st.number_input("ความกว้างฐานราก X-axis (ม.)", value=round(B_min_geometry,2), min_value=0.40)
@@ -376,18 +308,12 @@ with st.sidebar:
     DL = st.number_input("Dead Load (ตัน)", value=55.0)
     LL = st.number_input("Live Load (ตัน)", value=30.0)
     
-    # สุ่ม Moment เพื่อการทดสอบ
     Mcx_dl, Mcy_dl, Mcx_ll, Mcy_ll = 6.0, 5.0, 4.0, 3.0
-    
-    # ถมดิน
     soil_depth = 1.0; soil_density = 1.8
-    
-    # หน้าตัดเสาตอม่อและวัสดุ
     cx, cy = 0.35, 0.35
-    fc_prime = 280; fy = 4000 # KSC, kg/cm2
-    bar_dia = st.selectbox("ขนาดเหล็กแกน DB (มม.)", [12, 16, 20, 25, 28, 32], index=2) # Default DB20
+    fc_prime = 280; fy = 4000 
+    bar_dia = st.selectbox("ขนาดเหล็กแกน DB (มม.)", [12, 16, 20, 25, 28, 32], index=2)
     
-    # ความหนาฐานราก t และ Covering
     thickness_mode = st.radio("โหมดกำหนดความหนา t:", ["Auto-Optimize", "Manual Override"])
     manual_t = 0.65
     if thickness_mode == "Manual Override":
@@ -395,16 +321,16 @@ with st.sidebar:
         
     pile_embed_cm = 5.0; concrete_cover_cm = 7.5
 
-phi_shear, phi_flexure = 0.75, 0.90 # กำลังลด
-ab_area = (math.pi * (bar_dia / 10) ** 2) / 4 # เนื้อที่เหล็ก 1 เส้น
+phi_shear, phi_flexure = 0.75, 0.90 
+ab_area = (math.pi * (bar_dia / 10) ** 2) / 4 
 
 # =========================================================================
 # MAIN DATA PROCESSING FLOW
 # =========================================================================
-# STEP 1: AS-BUILT DATA EDITOR
 st.markdown("### 📍 1. การวิเคราะห์As-Built Field Survey เข็มตอม่อ")
 st.info("💡 **ข้อมูล Dynamic:** การปรับ ΔX, ΔY จะส่งผลกระทบต่อแรงที่เข็มรับทันที")
 
+# จำนวนแถวข้อมูลจะเท่ากันทั้งหมดแล้ว หมดปัญหา Array Length Mismatch
 df_initial = pd.DataFrame({
     'ชื่อเข็ม': [f"P{i+1}" for i in range(n_piles)],
     'Ideal X (ม.)': [round(p[0], 3) for p in piles_ideal],
@@ -414,39 +340,31 @@ df_initial = pd.DataFrame({
 })
 edited_df = st.data_editor(df_initial, disabled=['ชื่อเข็ม', 'Ideal X (ม.)', 'Ideal Y (ม.)'], hide_index=True, use_container_width=True)
 
-# คำนวณพิกัดAs-Built
 piles_actual = []
 for _, row in edited_df.iterrows():
     piles_actual.append((row['Ideal X (ม.)'] + row['ΔX (ม.) - หน้างาน'], row['Ideal Y (ม.)'] + row['ΔY (ม.) - หน้างาน']))
 
-# หา CG ของกลุ่มเข็มจริง
 cg_actual_x = sum(p[0] for p in piles_actual) / n_piles
 cg_actual_y = sum(p[1] for p in piles_actual) / n_piles
-ecc_x, ecc_y = cg_actual_x - 0.0, cg_actual_y - 0.0 # เยื้องCG เทียบศูนย์กลางตอม่อ
+ecc_x, ecc_y = cg_actual_x - 0.0, cg_actual_y - 0.0 
 
-# Inertia ของกลุ่มเข็ม As-Built
 piles_relative = [(p[0] - cg_actual_x, p[1] - cg_actual_y) for p in piles_actual]
 I_yy_group = max(0.001, sum(p[0]**2 for p in piles_relative))
 I_xx_group = max(0.001, sum(p[1]**2 for p in piles_relative))
 
-# --- คำนวณ Load Combination ---
 P_ultimate = (factor_dl * DL) + (factor_ll * LL)
 Mu_cx = (factor_dl * Mcx_dl) + (factor_ll * Mcx_ll)
 Mu_cy = (factor_dl * Mcy_dl) + (factor_ll * Mcy_ll)
 
-# 🔥 FIXED: เพิ่มการประกาศ Service Moments ป้องกัน NameError ในบรรทัดตรวจสอบ Service
 Ms_cx = Mcx_dl + Mcx_ll
 Ms_cy = Mcy_dl + Mcy_ll
 
-# พื้นที่ฐานรากและน้ำหนักดินถม
 footing_area = B_ft * L_ft
 W_soil = max(0.0, footing_area - (cx*cy)) * soil_depth * soil_density
 
-# ขอบเขตคอนกรีตฐานรากAs-Built
 concrete_vertices = [(-B_ft/2 - ecc_x, -L_ft/2 - ecc_y), (B_ft/2 - ecc_x, -L_ft/2 - ecc_y), 
                      (B_ft/2 - ecc_x, L_ft/2 - ecc_y), (-B_ft/2 - ecc_x, L_ft/2 - ecc_y)]
 
-# --- ประมวลผลความหนาและเฉือน Dynamic ---
 if thickness_mode == "Auto-Optimize":
     d_opt = 0.30; safe = False; p_ult_out = [0.0] * n_piles
     while d_opt < 3.0:
@@ -464,7 +382,6 @@ else:
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices, factor_dl
     )
 
-# --- คำนวณตรวจสอบแรงอัดเข็ม Service Load ---
 P_u_total = P_ultimate + factor_dl * ( (footing_area*t_actual*2.4) + W_soil)
 w_s_footing = footing_area * t_actual * 2.4
 P_service_total = DL + LL + w_s_footing + W_soil
@@ -473,15 +390,12 @@ Ms_cy_total = Ms_cy + P_service_total * ecc_x
 
 pile_service_reactions = []
 for prx, pry in piles_relative:
-    # Elastic Mechanics Service Loads
     R_s = (P_service_total / n_piles) + (Ms_cy_total * prx / I_yy_group) + (Ms_cx_total * pry / I_xx_group)
     pile_service_reactions.append(R_s)
 
-# --- วิเคราะห์ Negative Moment และตรวจสอบความจำเป็นของเหล็กตะแกรงบน ---
 has_tension = any(r < 0 for r in p_ult_out)
-require_top_steel = has_tension or (t_actual >= 0.60) # บังคับใส่เมื่อหนาเกน 60cm หรือมีแรงถอนเข็ม
+require_top_steel = has_tension or (t_actual >= 0.60) 
 
-# STEP 2-5 แสดงผล UI substitutions (กู้คืนเนื้อหาUIที่หายไป)
 st.markdown("### 🏗️ 2-5 ข้อมูล substitutions และความปลอดภัย")
 col_res1, col_res2 = st.columns(2)
 with col_res1:
@@ -496,13 +410,12 @@ with col_res2:
     df_react = pd.DataFrame({'ชื่อเข็ม': df_initial['ชื่อเข็ม'], 'R_u (ตัน)': p_ult_out})
     st.dataframe(df_react, hide_index=True)
 
-# flexural design
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 w_flex_x = B_ft * 100
 n_bars_x, sp_x, _, _ = design_rebar_by_axis(Mu_x_top, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
 # =========================================================================
-# STEP 6: DUAL VISUALIZATION (THE ULTIMATE VERSION)
+# STEP 6: DUAL VISUALIZATION
 # =========================================================================
 st.markdown("---")
 st.markdown("### 🗺️ 6. Engineering Visual Twin Plots (Ultimate Detailing)")
