@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V7.4", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V7.5", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -40,17 +40,16 @@ def initialize_thai_font_system():
 current_thai_font = initialize_thai_font_system()
 
 # =========================================================================
-# HELPER FUNCTIONS (MATH & GEOMETRY INTERSECTION)
+# HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION)
 # =========================================================================
 def point_to_segment_dist(px, py, x1, y1, x2, y2):
     dx, dy = x2 - x1, y2 - y1
-    if dx == 0 and dy == 0: return math.sqrt((px - x1)**2 + (py - y1)**2)
+    if dx == 0 and dy == 0: return math.sqrt((px - x1)**2 + (py - py)**2)
     t = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)
     t = max(0.0, min(1.0, t))
     return math.sqrt((px - (x1 + t * dx))**2 + (py - (y1 + t * dy))**2)
 
 def get_polygon_section_width_at_y(target_y, vertices):
-    """คำนวณหาความกว้างแนวนอน (แกน X) ของรูปทรงฐานราก ณ ตำแหน่งระดับ Y ที่กำหนด"""
     intersections = []
     n = len(vertices)
     for i in range(n):
@@ -69,7 +68,6 @@ def get_polygon_section_width_at_y(target_y, vertices):
     return max(intersections) - min(intersections)
 
 def get_polygon_section_length_at_x(target_x, vertices):
-    """คำนวณหาความยาวแนวตั้ง (แกน Y) ของรูปทรงฐานราก ณ ตำแหน่งแนว X ที่กำหนด (ใช้สไลด์หาหน้าตัดรับ Moment แกน Y)"""
     intersections = []
     n = len(vertices)
     for i in range(n):
@@ -90,12 +88,43 @@ def get_polygon_section_length_at_x(target_x, vertices):
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
 
+def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l):
+    fig, ax = plt.subplots(figsize=(6, 6))
+    x_v = [v[0] for v in vertices] + [vertices[0][0]]
+    y_v = [v[1] for v in vertices] + [vertices[0][1]]
+    
+    ax.plot(x_v, y_v, '-', color='#1e8449', linewidth=2.5, label='Footing Boundary')
+    ax.fill(x_v, y_v, color='#2ecc71', alpha=0.2)
+    
+    col_rect = patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=2, edgecolor='#922b21', facecolor='#e74c3c', alpha=0.7, label='Column Stub')
+    ax.add_patch(col_rect)
+    
+    for i, (px, py) in enumerate(piles_actual):
+        if pile_shape == "Circular Pile":
+            pile_shape_patch = patches.Circle((px, py), pile_w/2, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
+        else:
+            pile_shape_patch = patches.Rectangle((px - pile_w/2, py - pile_l/2), pile_w, pile_l, linewidth=1.5, edgecolor='#2c3e50', facecolor='#34495e', alpha=0.6)
+        ax.add_patch(pile_shape_patch)
+        ax.text(px, py, f"P{i+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold')
+        
+    ax.axhline(0, color='black', linewidth=0.5, linestyle='--')
+    ax.axvline(0, color='black', linewidth=0.5, linestyle='--')
+    ax.set_xlabel('X-Axis Offset (m)')
+    ax.set_ylabel('Y-Axis Offset (m)')
+    ax.set_title('As-Built Footing Plan View (2D Mapping)', fontsize=12, fontweight='bold')
+    ax.axis('equal')
+    ax.grid(True, linestyle=':', alpha=0.6)
+    
+    ax.plot([], [], 's', color='#34495e', label='As-Built Piles')
+    ax.legend(loc='upper right')
+    return fig
+
 # =========================================================================
-# CORE ENGINEERING LOGIC (SEPARATION OF CONCERNS)
+# CORE ENGINEERING LOGIC
 # =========================================================================
-def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, footing_shape, b_ft, vertices, phi_s=0.75):
-    w_u_footing_weight = 1.2 * (area * eval_t * 2.4)
-    w_u_soil_weight = 1.2 * W_soil
+def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, footing_shape, b_ft, vertices, factor_dl, phi_s=0.75):
+    w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
+    w_u_soil_weight = factor_dl * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
@@ -204,15 +233,19 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
     return fig_3d
 
 # =========================================================================
-# UI & APPLICATION LAYOUT
+# UI SIDEBAR CONFIGURATIONS
 # =========================================================================
-st.title("📐 Enterprise Footing Suite (V7.4 - Dynamic Pile)")
-st.markdown("### Footing Analysis System: Dynamic Pile Shapes, Fixed Dimensions and Safety Checks")
+st.title("📐 Enterprise Footing Suite (V7.5 - Custom Combination)")
+st.markdown("### Footing Analysis System: Dynamic Pile Shapes, Configurable Load Combinations and Safety Checks")
 st.markdown("---")
 
 with st.sidebar:
     st.header("🏗️ Statics and Material Specifications")
     footing_shape_type = st.selectbox("Footing Geometry Shape:", ["Truncated Triangular Footing", "Rectangular Footing"], index=0)
+    
+    st.subheader("🛠️ User-Defined Load Combination Factors")
+    factor_dl = st.number_input("Dead Load Factor (γ_DL)", value=1.2, min_value=0.0, step=0.1)
+    factor_ll = st.number_input("Live Load Factor (γ_LL)", value=1.6, min_value=0.0, step=0.1)
     
     st.subheader("1. Pile Shape & Dimensions Configurations")
     pile_shape = st.selectbox("Select Pile Configuration Shape:", ["Circular Pile", "Square/Rectangular Pile"], index=0)
@@ -269,8 +302,6 @@ with st.sidebar:
         L_input = st.number_input("Total Length Y-axis (L, m)", value=float(round(L_min_geometry, 2)), min_value=0.4, step=0.05)
         B_ft = max(B_input, B_min_geometry)
         L_ft = max(L_input, L_min_geometry)
-        if B_input < B_min_geometry or L_input < L_min_geometry:
-            st.error("🚨 Adjusted to minimum values for safety.")
     else:
         B_ft = B_min_geometry
         L_ft = L_min_geometry
@@ -315,7 +346,7 @@ ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 # AS-BUILT FIELD SURVEY DATA EDITOR
 # =========================================================================
 st.markdown("### 📍 1. As-Built Field Survey Analysis")
-st.info("💡 **Data Linkage:** This table directly affects the engineering calculations.")
+st.info("💡 **Dynamic Calculation:** Modifying ΔX or ΔY will immediately update the load distributions and structural diagrams below.")
 
 df_initial = pd.DataFrame({
     'Pile Name': [f"P{i+1}" for i in range(n_piles)],
@@ -340,9 +371,9 @@ I_yy_group = sum(p[0]**2 for p in piles_relative)
 I_xx_group = sum(p[1]**2 for p in piles_relative)
 
 P_service = DL + LL
-P_ultimate = (1.2 * DL) + (1.6 * LL)
-Mu_cx = (1.2 * Mcx_dl) + (1.6 * Mcx_ll)
-Mu_cy = (1.2 * Mcy_dl) + (1.6 * Mcy_ll)
+P_ultimate = (factor_dl * DL) + (factor_ll * LL)
+Mu_cx = (factor_dl * Mcx_dl) + (factor_ll * Mcx_ll)
+Mu_cy = (factor_dl * Mcy_dl) + (factor_ll * Mcy_ll)
 Ms_cx = Mcx_dl + Mcx_ll
 Ms_cy = Mcy_dl + Mcy_ll
 
@@ -369,16 +400,7 @@ else:
 col_area = cx * cy
 W_soil = max(0.0, footing_area - col_area) * soil_depth * soil_density
 
-net_min_edge_dist = float('inf')
-segments = [(concrete_vertices[i], concrete_vertices[(i+1)%len(concrete_vertices)]) for i in range(len(concrete_vertices))]
-for px, py in piles_actual:
-    current_min = min(point_to_segment_dist(px, py, seg[0][0], seg[0][1], seg[1][0], seg[1][1]) - max_pile_dim/2 for seg in segments)
-    if current_min < net_min_edge_dist: net_min_edge_dist = current_min
-
-if net_min_edge_dist < 0.10:
-    st.error(f"🚨 **[As-Built Alert]** Edge distance is only {net_min_edge_dist*100:.1f} cm. Risk of spalling!")
-
-# --- Calculations Processing ---
+# --- Dynamic Processing with Variable Load Factors ---
 if thickness_mode == "Auto-Optimize":
     d_opt = 0.30
     step_safe = False
@@ -387,7 +409,7 @@ if thickness_mode == "Auto-Optimize":
         t_opt = d_opt + (concrete_cover_cm/100) + (pile_embed_cm/100) + ((bar_dia/1000)/2)
         step_safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
             d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, 
-            n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices
+            n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices, factor_dl
         )
         if step_safe: break
         d_opt += 0.02
@@ -398,7 +420,7 @@ else:
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
     step_safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, 
-        n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices
+        n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, footing_shape_type, B_ft, concrete_vertices, factor_dl
     )
 
 w_s_footing = footing_area * t_actual * 2.4
@@ -414,7 +436,7 @@ for prx, pry in piles_relative:
     pile_service_reactions.append(R_s)
 
 # =========================================================================
-# FLEXURAL FACE MOMENT ANALYSIS (GOVERNING CRITICAL SECTIONS)
+# FLEXURAL FACE MOMENT ANALYSIS
 # =========================================================================
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 Mu_x_bot = abs(sum(p_ult_out[i] * (-cy/2 - p[1]) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
@@ -442,7 +464,10 @@ if As_req_y_right >= As_req_y_left:
 else:
     Mu_y_face, w_flex_y, n_main_bars_y, sp_main_y, crash_fy, As_req_y = Mu_y_left, w_flex_y_left, n_bars_y_left, sp_y_left, crash_y_left, As_req_y_left
 
-is_structure_crashed = crash_fx or crash_fy or (not step_safe)
+# Coupling state variable assignments
+P_u_total = P_ultimate + factor_dl * (w_s_footing + W_soil)
+Mu_x_total = Mu_cx + (P_u_total * (-ecc_y))
+Mu_y_total = Mu_cy + (P_u_total * (-ecc_x))
 
 b1_box, b2_box = cx + d_actual, cy + d_actual
 b_0_len = 2 * (b1_box + b2_box)
@@ -452,25 +477,14 @@ bw_y_width = get_polygon_section_width_at_y(cut_y_pos, concrete_vertices)
 Vu_punch_kg = float(sum(max(0.0, float(p)) for p in p_ult_out)) * 1000.0
 Vu_wb_kg = sum(max(0.0, float(p)) for idx, p in enumerate(p_ult_out) if piles_actual[idx][1] >= cut_y_pos) * 1000.0
 
-pile_ur = max(pile_service_reactions) / pile_cap if pile_cap > 0 else 1.0
-punching_ur = v_up / v_cp if v_cp > 0 else 1.0
-wide_beam_ur = v_uwb / v_cwb if v_cwb > 0 else 1.0
-
-# =========================================================================
-# DECLARE CRITICAL COUPLING LOGIC VARIABLES (PREVENT NAMEERROR)
-# =========================================================================
-P_u_total = P_ultimate + 1.2 * (w_s_footing + W_soil)
-Mu_x_total = Mu_cx + (P_u_total * (-ecc_y))
-Mu_y_total = Mu_cy + (P_u_total * (-ecc_x))
-
 # -------------------------------------------------------------------------
 # STEP 2: FACTORED AXIAL LOADS & COMBINED FORCES
 # -------------------------------------------------------------------------
 st.markdown("### 🏗️ Step 2: Factored Axial Loads & Combined Forces")
-st.markdown("Total factored axial load acting on the pile group center, including the structural dead/live loads, footing self-weight, and soil surcharge load factors (Load Factor = 1.2 for structural weights):")
+st.markdown(f"Total factored axial load acting on the pile group center, incorporating custom load factors ($\gamma_{{DL}} = {factor_dl}$, $\gamma_{{LL}} = {factor_ll}$):")
 
-st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
-st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + 1.2 \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
+st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + \gamma_{DL} \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
+st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + {factor_dl} \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
 
 st.markdown("#### Factored Moments Incorporating As-Built Eccentricities:")
 st.markdown(r"$$\text{Governing Equation (X-Axis): } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
@@ -485,46 +499,22 @@ st.markdown("---")
 # STEP 3: PILE GROUP MECHANICS (PILE-BY-PILE ANALYSIS)
 # -------------------------------------------------------------------------
 st.markdown("### 🪵 Step 3: Pile Group Mechanics & Stress Distribution")
-st.markdown("Individual pile reactions are computed using linear elastic structural mechanics based on the As-Built survey coordinate mappings.")
 st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{n} \pm \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
 
-col_v1, col_v2 = st.columns(2)
-with col_v1:
-    st.markdown(f"""
-    **Geometric Sectional Properties:**
-    * Number of piles ($n$): `{n_piles}` piles
-    * Pile Profile Config: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
-    * Group Inertia $I_{{xx}}$: `{I_xx_group:.4f}` m²
-    * Group Inertia $I_{{yy}}$: `{I_yy_group:.4f}` m²
-    * Eccentricity ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
-    """)
-with col_v2:
-    st.markdown(f"""
-    **Combined External Forces (Factored):**
-    * Total Ult. Load ($P_{{u,\\text{{total}}}}$): `{P_u_total:.2f}` tons
-    * Combined Moment $M_{{ux}}$: `{Mu_x_total:.2f}` ton-m
-    * Combined Moment $M_{{uy}}$: `{Mu_y_total:.2f}` ton-m
-    """)
-
-st.markdown("#### Detailed Mathematical Substitution per Pile:")
 for i in range(n_piles):
     xi = piles_relative[i][0]
     yi = piles_relative[i][1]
-    
     term_p = P_u_total / n_piles
     term_my = (Mu_y_total * xi) / I_yy_group if I_yy_group > 0 else 0.0
     term_mx = (Mu_x_total * yi) / I_xx_group if I_xx_group > 0 else 0.0
     
-    st.markdown(f"**🔴 Pile Identifier: P{i+1}** (As-Built Offsets: $x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
-    st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}}$$")
-    st.markdown(f"$$R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
-    st.markdown(f"* **Service Working Load:** Status Check = `{round(pile_service_reactions[i], 2)}` tons (Allowable Cap = `{pile_cap}` tons)")
+    st.markdown(f"**🔴 Pile Identifier: P{i+1}** ($x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
+    st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}} = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
     
     if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap:
-        st.caption(f"Status P{i+1}: ✅ Pass (Within Safe Bearing Limits)")
+        st.caption(f"Status P{i+1}: ✅ Safe (Working Load = {pile_service_reactions[i]:.2f} tons / Allowable = {pile_cap} tons)")
     else:
-        st.error(f"Status P{i+1}: ❌ Overstressed (Exceeds Geotechnical Capacity Limits)")
-    st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+        st.error(f"Status P{i+1}: ❌ Overstressed (Working Load = {pile_service_reactions[i]:.2f} tons limits exceeded!)")
 
 st.markdown("---")
 
@@ -537,25 +527,17 @@ safe_d = d_actual * 100 if d_actual > 0 else 1.0
 safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
 
 st.markdown("**A) Two-Way Punching Shear Check ($d/2$ from column face):**")
-st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{punch}}}{b_0 \cdot d}$$")
 st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
 st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
-
-if v_up <= v_cp: 
-    st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_up:.2f} $\\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
-else: 
-    st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc). Footing thickness must be increased!")
+if v_up <= v_cp: st.success(f"✅ **Safe:** Punching shear stress is within allowable capacity limits.")
+else: st.error(f"❌ **Unsafe:** Punching stress exceeds capacity! Increase footing thickness.")
 
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
-st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{wide-beam}}}{b_w \cdot d}$$")
 st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
 st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
-
-if v_uwb <= v_cwb: 
-    st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_uwb:.2f} $\\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
-else: 
-    st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc). One-way shear structural failure risk detected!")
+if v_uwb <= v_cwb: st.success(f"✅ **Safe:** Wide-beam shear is within safe margins.")
+else: st.error(f"❌ **Unsafe:** One-way shear failure risk detected!")
 
 st.markdown("---")
 
@@ -563,8 +545,6 @@ st.markdown("---")
 # STEP 5: FLEXURAL DESIGN & REBAR LAYOUT
 # -------------------------------------------------------------------------
 st.markdown("### 🥩 Step 5: Flexural Design and Rebar Layout")
-st.markdown("Bending moments are evaluated at the critical face of the column stub to calculate the required reinforcement area.")
-
 df_rebar = pd.DataFrame({
     "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
     "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
@@ -574,36 +554,32 @@ df_rebar = pd.DataFrame({
 })
 st.dataframe(df_rebar, use_container_width=True, hide_index=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("**C) Reinforcement Development Length Check ($L_d$):**")
 l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
 available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
-
-st.markdown(r"$$\text{Governing Equation: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
-st.markdown(f"$$\\text{{Substitution: }} L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
-st.markdown(f"* **Available Embedment Length within Footing Geometry:** `{available_length_x:.1f}` cm")
-
+st.markdown(f"$$L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
 if available_length_x >= l_d_required:
-    st.success(f"✅ **Pass:** Available embedment length ({available_length_x:.1f} cm) exceeds required development length ({l_d_required:.1f} cm). Straight bar extensions are structurally sufficient.")
+    st.success(f"✅ **Pass:** Available length ({available_length_x:.1f} cm) ≥ Required $L_d$ ({l_d_required:.1f} cm).")
 else:
-    st.warning(f"⚠️ **Warning:** Insufficient embedment length ({available_length_x:.1f} cm < {l_d_required:.1f} cm). **Standard 90-degree hooks must be detailed** at both bar ends to ensure tension anchor compliance.")
+    st.warning(f"⚠️ **Hook Required:** Available length ({available_length_x:.1f} cm) < {l_d_required:.1f} cm. 90-degree hooks must be detailed.")
 
 # -------------------------------------------------------------------------
-# STEP 6: 3D STRUCTURAL MESH VISUALIZATION
+# STEP 6: DUAL VISUALIZATION (2D MATPLOTLIB PLAN & 3D INTERACTIVE MESH)
 # -------------------------------------------------------------------------
 st.markdown("---")
-st.markdown("### 🗺️ Step 6: 3D Interactive Mesh Visualization")
-st.markdown("This 3D structural twin illustrates the true spatial boundaries of the footing, the loading column, and the field as-built pile configurations.")
+st.markdown("### 🗺️ Step 6: Engineering Visual Twin Plots (2D & 3D Twins)")
+st.markdown("วิเคราะห์ตำแหน่งเสาตอม่อ ขอบเขตโครงสร้างฐานราก และพิกัดตำแหน่งจริงหลังตอกเข็ม (As-Built Field Coordinates)")
 
-fig_3d = generate_3d_mesh(
-    tuple(concrete_vertices), 
-    t_actual, 
-    cx, 
-    cy, 
-    tuple(piles_actual), 
-    pile_shape, 
-    pile_w, 
-    pile_l, 
-    pile_embed_cm / 100
-)
-st.plotly_chart(fig_3d, use_container_width=True)
+col_plot1, col_plot2 = st.columns(2)
+
+with col_plot1:
+    st.markdown("#### 📐 A) 2D Plan View (Matplotlib Plot)")
+    fig_2d = generate_2d_plan_view(concrete_vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l)
+    st.pyplot(fig_2d)
+
+with col_plot2:
+    st.markdown("#### 🧊 B) 3D Interactive Model (Plotly Mesh)")
+    fig_3d = generate_3d_mesh(
+        tuple(concrete_vertices), t_actual, cx, cy, 
+        tuple(piles_actual), pile_shape, pile_w, pile_l, pile_embed_cm / 100
+    )
+    st.plotly_chart(fig_3d, use_container_width=True)
