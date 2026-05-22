@@ -550,17 +550,13 @@ with tab3:
     st.markdown("### 📐 Step 1: Effective Depth Calculation ($d$)")
     st.markdown("The effective depth is calculated by subtracting concrete cover, pile embedment depth, and half of the main rebar diameter from the total thickness.")
     
-    # 1. Pure LaTeX formula using 'r' string (NO 'f' to avoid curly brace parsing errors)
-    st.markdown(r"$$\text{Governing Equation: } d = t_{\text{footing}} - \text{Cover} - \text{Embedment} - \frac{\emptyset_{\text{bar}}}{2}$$")
-    
-    # Pre-calculate meter conversions to keep the Streamlit f-string clean
     cover_m = concrete_cover_cm / 100
     embed_m = pile_embed_cm / 100 if 'pile_embed_cm' in locals() else 0.1
     bar_m = bar_dia / 1000
     t_footing_m = d_actual + cover_m + embed_m
     
-    # 2. Substitution line using standard 'f' string with double backslashes for LaTeX
-    st.markdown(f"$$\\text{{Substitution: }} d = {t_footing_m:.3f}\\text{{ m}} - {cover_m:.3f}\\text{{ m}} - {embed_m:.3f}\\text{{ m}} - \\frac{{{bar_m:.3f}\\text{{ m}}}}{{2}} = \\mathbf{{{d_actual:.3f}}}\\text{{ m}}$$")
+    st.markdown(r"$$\text{Governing Equation: } d = t_{\text{footing}} - \text{Cover} - \text{Embedment} - \frac{\emptyset_{\text{bar}}}{2}$$")
+    st.markdown(f"$$\\text{{Substitution: }} d = {t_footing_m:.3f} \\text{{ m}} - {cover_m:.3f} \\text{{ m}} - {embed_m:.3f} \\text{{ m}} - \\frac{{{bar_m:.3f} \\text{{ m}}}}{{2}} = \\mathbf{{{d_actual:.3f}}} \\text{{ m}}$$")
     
     st.markdown("---")
     
@@ -570,15 +566,15 @@ with tab3:
     st.markdown("### 🏗️ Step 2: Factored Axial Loads & Combined Forces")
     st.markdown("Total factored axial load acting on the pile group center, including the structural dead/live loads, footing self-weight, and soil surcharge load factors (Load Factor = 1.2 for structural weights):")
     
-    st.markdown(rf"$$\text{{Governing Equation: }} P_{{u,\text{{total}}}} = P_{{u,\text{{structure}}}} + 1.2 \cdot (W_{\text{{footing}}} + W_{\text{{soil}}})$$")
-    st.markdown(rf"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + 1.2 \cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \mathbf{{{P_u_total:.2f}}}\text{{ tons}}$$")
+    st.markdown(r"$$\text{Governing Equation: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
+    st.markdown(f"$$P_{{u,\\text{{total}}}} = {P_ultimate:.2f} + 1.2 \\cdot ({w_s_footing:.2f} + {W_soil:.2f}) = \\mathbf{{{P_u_total:.2f}}} \\text{{ tons}}$$")
     
     st.markdown("#### Factored Moments Incorporating As-Built Eccentricities:")
-    st.markdown(rf"$$\text{{Governing Equation (X-Axis): }} M_{{ux,\text{{total}}}} = M_{{ux,\text{{column}}}} + [P_{{u,\text{{total}}}} \cdot (-\Delta Y)]$$")
-    st.markdown(rf"$$M_{{ux,\text{{total}}}} = {Mu_cx:.2f} + [{P_u_total:.2f} \cdot ({-ecc_y:.3f})] = \mathbf{{{Mu_x_total:.2f}}}\text{{ ton-m}}$$")
+    st.markdown(r"$$\text{Governing Equation (X-Axis): } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
+    st.markdown(f"$$M_{{ux,\\text{{total}}}} = {Mu_cx:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_y:.3f})] = \\mathbf{{{Mu_x_total:.2f}}} \\text{{ ton-m}}$$")
     
-    st.markdown(rf"$$\text{{Governing Equation (Y-Axis): }} M_{{uy,\text{{total}}}} = M_{{uy,\text{{column}}}} + [P_{{u,\text{{total}}}} \cdot (-\Delta X)]$$")
-    st.markdown(rf"$$M_{{uy,\text{{total}}}} = {Mu_cy:.2f} + [{P_u_total:.2f} \cdot ({-ecc_x:.3f})] = \mathbf{{{Mu_y_total:.2f}}}\text{{ ton-m}}$$")
+    st.markdown(r"$$\text{Governing Equation (Y-Axis): } M_{uy,\text{total}} = M_{uy,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta X)]$$")
+    st.markdown(f"$$M_{{uy,\\text{{total}}}} = {Mu_cy:.2f} + [{P_u_total:.2f} \\cdot ({-ecc_x:.3f})] = \\mathbf{{{Mu_y_total:.2f}}} \\text{{ ton-m}}$$")
     
     st.markdown("---")
     
@@ -587,7 +583,7 @@ with tab3:
     # -------------------------------------------------------------------------
     st.markdown("### 🪵 Step 3: Pile Group Mechanics & Stress Distribution")
     st.markdown("Individual pile reactions are computed using linear elastic structural mechanics based on the As-Built survey coordinate mappings.")
-    st.markdown(rf"$$\text{{Governing Equation: }} R_{{u,i}} = \frac{{P_{{u,\text{{total}}}}}}{{n}} \pm \frac{{M_{{uy,\text{{total}}}} \cdot x_i}}{{I_{{yy}}}} \pm \frac{{M_{{ux,\text{{total}}}} \cdot y_i}}{{I_{{xx}}}}$$")
+    st.markdown(r"$$\text{Governing Equation: } R_{u,i} = \frac{P_{u,\text{total}}}{n} \pm \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
     
     col_v1, col_v2 = st.columns(2)
     with col_v1:
@@ -617,8 +613,8 @@ with tab3:
         term_mx = (Mu_x_total * yi) / I_xx_group if I_xx_group > 0 else 0.0
         
         st.markdown(f"**🔴 Pile Identifier: P{i+1}** (As-Built Offsets: $x$ = {xi:.3f} m, $y$ = {yi:.3f} m)")
-        st.markdown(rf"$$R_{{u, P{i+1}}} = \frac{{{P_u_total:.2f}}}{{{n_piles}}} + \frac{{{Mu_y_total:.2f} \cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \frac{{{Mu_x_total:.2f} \cdot ({yi:.3f})}}{{{I_xx_group:.4f}}}$$")
-        st.markdown(rf"$$R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \mathbf{{{p_ult_out[i]:.2f}}}\text{{ tons}}$$")
+        st.markdown(f"$$R_{{u, P{i+1}}} = \\frac{{{P_u_total:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total:.2f} \\cdot ({xi:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total:.2f} \\cdot ({yi:.3f})}}{{{I_xx_group:.4f}}}$$")
+        st.markdown(f"$$R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$$")
         st.markdown(f"* **Service Working Load:** Status Check = `{round(pile_service_reactions[i], 2)}` tons (Allowable Cap = `{pile_cap}` tons)")
         
         if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap:
@@ -638,9 +634,9 @@ with tab3:
     safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
     
     st.markdown("**A) Two-Way Punching Shear Check ($d/2$ from column face):**")
-    st.markdown(rf"$$\text{{Governing Equation: }} v_u = \frac{{V_{{u,\text{{punch}}}}}}{{b_0 \cdot d}}$$")
-    st.markdown(rf"$$v_u = \frac{{{Vu_punch_kg:,.1f}\text{{ kg}}}}{{{safe_b0:.1f}\text{{ cm}} \times {safe_d:.1f}\text{{ cm}}}} = \mathbf{{{v_up:.2f}}}\text{{ ksc}}$$")
-    st.markdown(rf"$$\text{{Concrete Capacity Limit: }} \phi v_c = 0.75 \cdot 1.06 \cdot \sqrt{{{fc_prime}}} = \mathbf{{{v_cp:.2f}}}\text{{ ksc}}$$")
+    st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{punch}}}{b_0 \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
+    st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
     
     if v_up <= v_cp: 
         st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_up:.2f} $\le$ {v_cp:.2f} ksc). Punching shear capacity is sufficient.")
@@ -649,9 +645,9 @@ with tab3:
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("**B) One-Way Wide-Beam Shear Check ($d$ from column face):**")
-    st.markdown(rf"$$\text{{Governing Equation: }} v_u = \frac{{V_{{u,\text{{wide-beam}}}}}}{{b_w \cdot d}}$$")
-    st.markdown(rf"$$v_u = \frac{{{Vu_wb_kg:,.1f}\text{{ kg}}}}{{{safe_bw:.1f}\text{{ cm}} \times {safe_d:.1f}\text{{ cm}}}} = \mathbf{{{v_uwb:.2f}}}\text{{ ksc}}$$")
-    st.markdown(rf"$$\text{{Concrete Capacity Limit: }} \phi v_c = 0.75 \cdot 0.53 \cdot \sqrt{{{fc_prime}}} = \mathbf{{{v_cwb:.2f}}}\text{{ ksc}}$$")
+    st.markdown(r"$$\text{Governing Equation: } v_u = \frac{V_{u,\text{wide-beam}}}{b_w \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
+    st.markdown(f"$$\\text{{Concrete Capacity Limit: }} \\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
     
     if v_uwb <= v_cwb: 
         st.success(f"✅ **Safe:** $v_u \le \phi v_c$ ({v_uwb:.2f} $\le$ {v_cwb:.2f} ksc). Wide-beam shear capacity is sufficient.")
@@ -680,8 +676,8 @@ with tab3:
     l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
     available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
     
-    st.markdown(rf"$$\text{{Governing Equation: }} L_d = \left(\frac{{f_y}}{{1.1 \cdot \sqrt{{f_c'}}}}\right) \cdot d_b$$")
-    st.markdown(rf"$$\text{{Substitution: }} L_d = \left(\frac{{{fy}}}{{1.1 \cdot \sqrt{{{fc_prime}}}}}\right) \cdot {bar_dia/10:.2f}\text{{ cm}} = \mathbf{{{l_d_required:.1f}}}\text{{ cm}}$$")
+    st.markdown(r"$$\text{Governing Equation: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
+    st.markdown(f"$$\\text{{Substitution: }} L_d = \\left(\\frac{{{fy}}}{{1.1 \\cdot \\sqrt{{{fc_prime}}}}}\\right) \\cdot {bar_dia/10:.2f} \\text{{ cm}} = \\mathbf{{{l_d_required:.1f}}} \\text{{ cm}}$$")
     st.markdown(f"* **Available Embedment Length within Footing Geometry:** `{available_length_x:.1f}` cm")
     
     if available_length_x >= l_d_required:
