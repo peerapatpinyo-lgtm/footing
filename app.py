@@ -535,130 +535,160 @@ with tab2:
     st.plotly_chart(mesh_fig, use_container_width=True)
 
 with tab3:
-    st.subheader("📋 Ultimate Engineering Calculation Report")
+    st.subheader("📋 Ultimate Engineering Calculation Report (Fully-Detailed Version)")
     st.markdown("Design Standard Reference: **ACI 318-19 / DPT 1301/1302-61**")
     st.markdown("---")
     
     # -------------------------------------------------------------------------
-    # SECTION 1: FACTORED LOADS & COMBINED FORCES
+    # STEP 1: GEOMETRIC & MATERIAL SUBSTITUTION
     # -------------------------------------------------------------------------
-    st.markdown("#### 🏗️ 1. Factored Axial Loads & Moments Calculation")
-    st.markdown("คำนวณน้ำหนักบรรทุกประลัยรวม โดยพิจารณาน้ำหนักบรรทุกจากโครงสร้าง น้ำหนักฐานราก และน้ำหนักดินถมทับ (Load Factor = 1.2)")
+    st.markdown("### 📐 ขั้นตอนที่ 1: ตัวแปรพื้นฐานและการคำนวณความลึกประสิทธิผล ($d$)")
+    st.markdown("คำนวณระยะจากผิวด้านบนถึงจุดศูนย์กลางเหล็กเสริมหลักเพื่อใช้ในการต้านทานแรงเฉือนและแรงดัด")
+    st.markdown(r"$$\text{สมการ: } d = t - \text{Covering} - \text{Embedment} - \frac{\emptyset_{\text{bar}}}{2}$$")
+    st.markdown(f"$$\\text{{แทนค่า: }} d = {t_actual:.3f} - {concrete_cover_cm/100:.3f} - {pile_embed_cm/100:.3f} - \\frac{{{bar_dia/1000:.3f}}}{{2}} = \\mathbf{{{d_actual:.3f}}} \\text{{ m}}$$")
     
-    # คำนวณตัวแปรสำหรับแสดงผลตัวเลขที่มาที่ไป
-    w_u_footing_weight = 1.2 * (footing_area * t_actual * 2.4)
+    st.markdown("---")
+    
+    # -------------------------------------------------------------------------
+    # STEP 2: WEIGHTS & FACTORED AXIAL FORCE
+    # -------------------------------------------------------------------------
+    st.markdown("### 🏗️ ขั้นตอนที่ 2: การคำนวณน้ำหนักฐานราก น้ำหนักดิน และแรงประลัยรวม ($P_u$)")
+    w_concrete_service = footing_area * t_actual * 2.4
+    w_u_footing_weight = 1.2 * w_concrete_service
     w_u_soil_weight = 1.2 * W_soil
     P_total_factored_calc = P_ultimate + w_u_footing_weight + w_u_soil_weight
+    
+    st.markdown("**2.1 น้ำหนักบรรทุกใช้งาน (Service Loads)**")
+    st.markdown(f"* น้ำหนักตัวฐานรากเอง ($W_{{\\text{{footing, service}}}}$): ${footing_area:.3f} \\text{{ m}}^2 \\times {t_actual:.2f} \\text{{ m}} \\times 2.4 \\text{{ t/m}}^3 = \\mathbf{{{w_concrete_service:.2f}}} \\text{{ tons}}$")
+    st.markdown(f"* น้ำหนักดินถมทับใช้งาน ($W_{{\\text{{soil, service}}}}$): $\\mathbf{{{W_soil:.2f}}} \\text{{ tons}}$")
+    st.markdown(f"* น้ำหนักบรรทุกรวมที่ระดับใช้งาน ($P_{\\text{{service, total}}}$): ${P_service:.2f} + {w_concrete_service:.2f} + {W_soil:.2f} = \\mathbf{{{P_service_total:.2f}}} \\text{{ tons}}$")
+    
+    st.markdown("**2.2 น้ำหนักบรรทุกประลัยรวมเพิ่มกำลัง (Factored Loads)**")
+    st.markdown(r"$$\text{สมการ: } P_{u,\text{total}} = [1.2 \cdot D.L. + 1.6 \cdot L.L.] + 1.2 \cdot W_{\text{footing}} + 1.2 \cdot W_{\text{soil}}$$")
+    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + 1.2 \\cdot ({w_concrete_service:.2f}) + 1.2 \\cdot ({W_soil:.2f})$$")
+    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + {w_u_footing_weight:.2f} + {w_u_soil_weight:.2f} = \\mathbf{{{P_total_factored_calc:.2f}}} \\text{{ tons}}$$")
+    
+    st.markdown("---")
+    
+    # -------------------------------------------------------------------------
+    # STEP 3: FACTORED MOMENTS WITH ECCENTRICITY
+    # -------------------------------------------------------------------------
+    st.markdown("### 🌪️ ขั้นตอนที่ 3: โมเมนต์ประลัยรวมรวมผลจากความเยื้องศูนย์ (As-Built Eccentricity)")
     Mu_x_total_calc = Mu_cx + (P_total_factored_calc * (-ecc_y))
     Mu_y_total_calc = Mu_cy + (P_total_factored_calc * (-ecc_x))
     
-    st.markdown(r"$$\text{สูตรน้ำหนักรวมประลัย: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
-    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + 1.2 \cdot ({footing_area:.2f} \times {t_actual:.2f} \times 2.4) + 1.2 \cdot ({W_soil:.2f})$$")
-    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + {w_u_footing_weight:.2f} + {w_u_soil_weight:.2f} = \mathbf{{{P_total_factored_calc:.2f}}} \text{{ tons}}$$")
+    st.markdown(r"$$\text{สมการแกน X: } M_{ux,\text{total}} = M_{ux,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta Y)]$$")
+    st.markdown(f"$$M_{{ux,\text{{total}}}} = {Mu_cx:.2f} + [{P_total_factored_calc:.2f} \\cdot ({-ecc_y:.3f})] = \\mathbf{{{Mu_x_total_calc:.2f}}} \\text{{ ton-m}}$$")
     
-    st.markdown(r"$$\text{สูตรโมเมนต์ประลัยรวมพิจารณาความเยื้องศูนย์: } M_{u,\text{total}} = M_{u,\text{column}} + (P_{u,\text{total}} \cdot e)$$")
-    st.markdown(f"$$M_{{ux,\text{{total}}}} = {Mu_cx:.2f} + ({P_total_factored_calc:.2f} \cdot {-ecc_y:.3f}) = \mathbf{{{Mu_x_total_calc:.2f}}} \text{{ ton-m}}$$")
-    st.markdown(f"$$M_{{uy,\text{{total}}}} = {Mu_cy:.2f} + ({P_total_factored_calc:.2f} \cdot {-ecc_x:.3f}) = \mathbf{{{Mu_y_total_calc:.2f}}} \text{{ ton-m}}$$")
+    st.markdown(r"$$\text{สมการแกน Y: } M_{uy,\text{total}} = M_{uy,\text{column}} + [P_{u,\text{total}} \cdot (-\Delta X)]$$")
+    st.markdown(f"$$M_{{uy,\text{{total}}}} = {Mu_cy:.2f} + [{P_total_factored_calc:.2f} \\cdot ({-ecc_x:.3f})] = \\mathbf{{{Mu_y_total_calc:.2f}}} \\text{{ ton-m}}$$")
     
     st.markdown("---")
     
     # -------------------------------------------------------------------------
-    # SECTION 2: PILE GROUP MECHANICS
+    # STEP 4: INDIVIDUAL PILE STRESS DISTRIBUTION (EVERY SINGLE PILE)
     # -------------------------------------------------------------------------
-    st.markdown("#### 🪵 2. Pile Group Mechanics and Stress Distribution")
-    st.markdown("การกระจายแรงปฏิกิริยาลงเสาเข็มแต่ละต้นโดยอ้างอิงคุณสมบัติหน้าตัดเชิงเรขาคณิตของกลุ่มเข็มจริงหน้างาน (As-Built)")
-    st.markdown(r"$$\text{Governing Equation: } R_i = \frac{P_{\text{total}}}{n} \pm \frac{M_{y,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{x,\text{total}} \cdot y_i}{I_{xx}}$$")
+    st.markdown("### 🪵 ขั้นตอนที่ 4: รายการคำนวณแรงปฏิกิริยาลงเสาเข็มรายต้น (Pile-by-Pile Analysis)")
+    st.markdown("กระจายแรงเข้าสู่เสาเข็มแต่ละต้นตามพิกัดจริงที่ได้จากการรังวัดหน้างาน (As-Built Coords)")
+    st.markdown(r"$$\text{สูตรคำนวณพิกัดประลัย: } R_{u,i} = \frac{P_{u,\text{total}}}{n} + \frac{M_{uy,\text{total}} \cdot x_i}{I_{yy}} + \frac{M_{ux,\text{total}} \cdot y_i}{I_{xx}}$$")
     
-    col_v1, col_v2 = st.columns(2)
-    with col_v1:
-        st.markdown(f"""
-        **Geometric Sectional Properties:**
-        * จำนวนเสาเข็มในกลุ่ม ($n$): `{n_piles}` ต้น
-        * หน้าตัดเสาเข็มที่ใช้: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
-        * Moment of Inertia ของกลุ่มเข็ม $I_{{xx}}$: `{I_xx_group:.4f}` m²
-        * Moment of Inertia ของกลุ่มเข็ม $I_{{yy}}$: `{I_yy_group:.4f}` m²
-        * ระยะเยื้องศูนย์ของกลุ่มเข็ม ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
-        """)
-    with col_v2:
-        st.markdown(f"""
-        **Combined External Forces (Factored):**
-        * น้ำหนักประลัยรวมแนวดิ่ง ($P_{{u,\\text{{total}}}}$): `{P_total_factored_calc:.2f}` tons
-        * โมเมนต์ประลัยดัดแกน X ($M_{{ux,\\text{{total}}}}$): `{Mu_x_total_calc:.2f}` ton-m
-        * โมเมนต์ประลัยดัดแกน Y ($M_{{uy,\\text{{total}}}}$): `{Mu_y_total_calc:.2f}` ton-m
-        """)
-
-    pile_results_detailed = []
     for i in range(n_piles):
-        p_status = "✅ Pass" if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap else "❌ Overstressed"
-        pile_results_detailed.append({
-            "Pile Name": f"P{i+1}",
-            "As-Built X (m)": round(piles_relative[i][0], 3),
-            "As-Built Y (m)": round(piles_relative[i][1], 3),
-            "Service Load (t)": round(pile_service_reactions[i], 2),
-            "Ult. Load (t)": round(p_ult_out[i], 2),
-            "Allowable Cap (t)": pile_cap,
-            "Status": p_status
-        })
-    st.dataframe(pd.DataFrame(pile_results_detailed), use_container_width=True, hide_index=True)
+        prx = piles_relative[i][0]
+        pry = piles_relative[i][1]
+        
+        # แยกชิ้นส่วนสูตรเพื่อให้เห็นตัวเลขชัดเจน
+        term_p = P_total_factored_calc / n_piles
+        term_my = (Mu_y_total_calc * prx) / I_yy_group if I_yy_group > 0 else 0.0
+        term_mx = (Mu_x_total_calc * pry) / I_xx_group if I_xx_group > 0 else 0.0
+        
+        st.markdown(f"**🔴 เสาเข็มต้นที่ P{i+1} (พิกัดสัมพัทธ์ Centroid: X = {prx:.3f} m, Y = {pry:.3f} m)**")
+        
+        # สมการระดับใช้งาน (Service Load Check)
+        st.markdown(f"* **ระดับใช้งาน:** $R_{{s}} = \\frac{{{P_service_total:.2f}}}{{{n_piles}}} + \\frac{{{Ms_y_total:.2f} \\cdot ({prx:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Ms_x_total:.2f} \\cdot ({pry:.3f})}}{{{I_xx_group:.4f}}}$")
+        st.markdown(f"  $R_{{s, P{i+1}}} = {P_service_total/n_piles:.2f} + ({term_my/average_load_factor:.2f}) + ({term_mx/average_load_factor:.2f}) = \\mathbf{{{pile_service_reactions[i]:.2f}}} \\text{{ tons}}$")
+        
+        # สมการระดับประลัย (Ultimate Load Check)
+        st.markdown(f"* **ระดับประลัย:** $R_{{u}} = \\frac{{{P_total_factored_calc:.2f}}}{{{n_piles}}} + \\frac{{{Mu_y_total_calc:.2f} \\cdot ({prx:.3f})}}{{{I_yy_group:.4f}}} + \\frac{{{Mu_x_total_calc:.2f} \\cdot ({pry:.3f})}}{{{I_xx_group:.4f}}}$")
+        st.markdown(f"  $R_{{u, P{i+1}}} = {term_p:.2f} + ({term_my:.2f}) + ({term_mx:.2f}) = \\mathbf{{{p_ult_out[i]:.2f}}} \\text{{ tons}}$")
+        
+        # ตรวจสอบขีดความสามารถ
+        if pile_service_reactions[i] > pile_cap:
+            st.error(f"  ⚠️ P{i+1} น้ำหนักใช้งาน ({pile_service_reactions[i]:.2f} t) เกินความสามารถแบกทานที่ยอมให้ ({pile_cap:.1f} t)!")
+        elif pile_service_reactions[i] < -pile_tension_cap:
+            st.error(f"  ⚠️ P{i+1} แรงดึงใช้งาน ({pile_service_reactions[i]:.2f} t) เกินกำลังต้านทานแรงถอน ({pile_tension_cap:.1f} t)!")
+        else:
+            st.caption(f"  Status P{i+1}: ผ่านเกณฑ์กำลังแบกทานเสาเข็มเดี่ยว")
+        st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     
     # -------------------------------------------------------------------------
-    # SECTION 3: CRITICAL SHEAR STRESS ANALYSIS
+    # STEP 5: PUNCHING SHEAR SUBSTITUTION
     # -------------------------------------------------------------------------
-    st.markdown("#### 📐 3. Critical Shear Stress Analysis")
+    st.markdown("### 📐 ขั้นตอนที่ 5: หน้าตัดวิกฤตและการตรวจสอบแรงเฉือนทะลุ (Punching Shear)")
+    st.markdown(f"ตรวจสอบรอบขอบตอม่อที่ระยะ $d/2 = {d_actual/2:.3f} \\text{{ m}}$")
     safe_b0 = b_0_len * 100 if b_0_len > 0 else 1.0
     safe_d = d_actual * 100 if d_actual > 0 else 1.0
-    safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
     
-    st.markdown("**A) การตรวจสอบแรงเฉือนทะลุ (Punching Shear Check)**")
-    st.markdown("พิจารณาพื้นที่วิกฤตโดยรอบห่างจากขอบเสาตอม่อเท่ากับระยะ $d/2$")
-    st.markdown(r"$$\text{สูตรหน่วยแรงเฉือนทะลุ: } v_u = \frac{V_{\text{u,punch}}}{b_0 \cdot d}$$")
-    st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
-    st.markdown(f"$$\\text{{กำลังรับแรงเฉือนคอนกรีตที่ยอมให้: }} \\phi v_c = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
-    if v_up <= v_cp: 
-        st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_up:.2f} $\\le$ {v_cp:.2f} ksc) โครงสร้างปลอดภัยต่อการเจาะทะลุ")
-    else: 
-        st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc) เสี่ยงต่อการวิบัติแบบเจาะทะลุ! ต้องเพิ่มความหนาฐานราก")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**B) การตรวจสอบแรงเฉือนแบบคานกว้าง (Wide-Beam Shear Check)**")
-    st.markdown("พิจารณาหน้าตัดวิกฤตตามแนวกว้างของฐานราก ห่างจากขอบเสาตอม่อเป็นระยะ $d$")
-    st.markdown(r"$$\text{สูตรหน่วยแรงเฉือนคานกว้าง: } v_u = \frac{V_{\text{u,wb}}}{b_w \cdot d}$$")
-    st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
-    st.markdown(f"$$\\text{{กำลังรับแรงเฉือนคอนกรีตที่ยอมให้: }} \\phi v_c = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
-    if v_uwb <= v_cwb: 
-        st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_uwb:.2f} $\\le$ {v_cwb:.2f} ksc) โครงสร้างปลอดภัยต่อแรงเฉือนคานกว้าง")
-    else: 
-        st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc) แรงเฉือนเกินพิกัดคอนกรีต!")
+    st.markdown(f"* **ความยาวเส้นรอบรูปวิกฤต ($b_0$):** $2 \\cdot [({cx} + {d_actual:.3f}) + ({cy} + {d_actual:.3f})] = \\mathbf{{{b_0_len:.3f}}} \\text{{ m}} = \\mathbf{{{safe_b0:.1f}}} \\text{{ cm}}$")
+    st.markdown(f"* **แรงเฉือนประลัยภายนอกหน้าตัดวิกฤต ($V_u$):** คิดรวมแรงจากเสาเข็มที่อยู่นอกเขตวิกฤต = $\\mathbf{{{Vu_punch_kg:,.1f}}} \\text{{ kg}}$")
+    
+    st.markdown(r"$$\text{คำนวณหน่วยแรงเฉือนเกิดขึ้นจริง: } v_u = \frac{V_u}{b_0 \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:.1f}}}{{{safe_b0:.1f} \\times {safe_d:.1f}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
+    
+    st.markdown(r"$$\text{กำลังรับแรงเฉือนสูงสุดที่คอนกรีตยอมให้: } \phi v_c = \phi \cdot 1.06 \cdot \sqrt{f_c'}$$")
+    st.markdown(f"$$\\phi v_c = 0.75 \\cdot 1.06 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
+    
+    if v_up <= v_cp:
+        st.success(f"✅ **ผ่านเกณฑ์แรงเฉือนทะลุ:** $v_u = {v_up:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$")
+    else:
+        st.error(f"❌ **ตกเกณฑ์แรงเฉือนทะลุ:** $v_u = {v_up:.2f} \\text{{ ksc}} > \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$ -> หนาไม่พอ!")
 
     st.markdown("---")
     
     # -------------------------------------------------------------------------
-    # SECTION 4: FLEXURAL DESIGN & REBAR LAYOUT
+    # STEP 6: WIDE-BEAM SHEAR SUBSTITUTION
     # -------------------------------------------------------------------------
-    st.markdown("#### 🥩 4. Flexural Design and Rebar Layout")
-    st.markdown("คำนวณหาปริมาณเหล็กเสริมต้านแรงดัดประลัยวิกฤตที่บริเวณขอบเสาตอม่อ โดยเปรียบเทียบกับเหล็กเสริมขั้นต่ำตามมาตรฐานคอนกรีตโครงสร้าง")
+    st.markdown("### 📐 ขั้นตอนที่ 6: หน้าตัดวิกฤตและการตรวจสอบแรงเฉือนคานกว้าง (Wide-Beam Shear)")
+    st.markdown(f"ตรวจสอบระนาบวิกฤตที่ระยะ $d = {d_actual:.3f} \\text{{ m}}$ วัดจากผิวหน้าของตอม่อแกน Yบวก")
+    safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
     
-    df_rebar = pd.DataFrame({
-        "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
-        "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
-        "Required As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
-        "Provided Rebar Spec": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
-        "Calculated Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
-    })
-    st.dataframe(df_rebar, use_container_width=True, hide_index=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**C) การตรวจสอบระยะฝังยึดเหล็กเสริมหลัก (Development Length Check)**")
-    l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
-    available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
+    st.markdown(f"* **ความกว้างหน้าตัดคอนกรีตที่ระนาบวิกฤต ($b_w$):** = $\\mathbf{{{bw_y_width:.3f}}} \\text{{ m}} = \\mathbf{{{safe_bw:.1f}}} \\text{{ cm}}$")
+    st.markdown(f"* **แรงเฉือนคานกว้างประลัยที่ผ่านระนาบวิกฤต ($V_u$):** คิดผลรวมเสาเข็มที่อยู่เกินแนวขอบเสา + $d$ = $\\mathbf{{{Vu_wb_kg:,.1f}}} \\text{{ kg}}$")
     
-    st.markdown(r"$$\text{สูตรระยะฝังยึดตามมาตรฐาน: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
-    st.markdown(f"* ระยะฝังยึดที่ต้องการตามทฤษฎี ($L_d$): **{l_d_required:.1f}** cm (คำนวณจากแรงดึงประลัย)")
-    st.markdown(f"* ระยะความยาวฝังเหล็กที่มีจริงในฐานราก ($L_{{\\text{{available}}}}$): **{available_length_x:.1f}** cm")
+    st.markdown(r"$$\text{คำนวณหน่วยแรงเฉือนคานกว้าง: } v_u = \frac{V_u}{b_w \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:.1f}}}{{{safe_bw:.1f} \\times {safe_d:.1f}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
     
-    if available_length_x >= l_d_required:
-        st.success(f"✅ **Pass:** ระยะฝังที่มีจริง ({available_length_x:.1f} cm) มีค่ามากกว่าตัวเลขที่ต้องการ ({l_d_required:.1f} cm) ปลายเหล็กสามารถจัดวางแบบดัดตรงได้เลย")
+    st.markdown(r"$$\text{กำลังต้านทานแรงเฉือนคานกว้างคอนกรีต: } \phi v_c = \phi \cdot 0.53 \cdot \sqrt{f_c'}$$")
+    st.markdown(f"$$\\phi v_c = 0.75 \\cdot 0.53 \\cdot \\sqrt{{{fc_prime}}} = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
+    
+    if v_uwb <= v_cwb:
+        st.success(f"✅ **ผ่านเกณฑ์แรงเฉือนคานกว้าง:** $v_u = {v_uwb:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$")
     else:
-        st.warning(f"⚠️ **Warning:** ระยะฝังยึดคอนกรีตไม่เพียงพอตามเกณฑ์ทฤษฎี ({available_length_x:.1f} cm < {l_d_required:.1f} cm) **ต้องทำการงอฉากปลายเหล็กเสริม 90 องศา (Standard Hooks)** เพื่อความปลอดภัย")
+        st.error(f"❌ **ตกเกณฑ์แรงเฉือนคานกว้าง:** $v_u = {v_uwb:.2f} \\text{{ ksc}} > \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$")
+
+    st.markdown("---")
+    
+    # -------------------------------------------------------------------------
+    # STEP 7: FLEXURAL REBAR AREA & SPACING ANALYSIS
+    # -------------------------------------------------------------------------
+    st.markdown("### 🥩 ขั้นตอนที่ 7: การคำนวณปริมาณเหล็กเสริมต้านแรงดัด (Flexural Rebar Calculation)")
+    st.markdown("พิจารณาการคำนวณแกนหลัก X-Axis (ขอบตอม่อวิกฤตดัด)")
+    
+    # คำนวณเหล็กเสริมขั้นต่ำตามมาตรฐาน
+    As_min_calc_x = 0.0018 * w_flex_x * (t_actual * 100)
+    
+    st.markdown(f"* **โมเมนต์ดัดประลัยที่ผิวเสา ($M_{{u,\\text{{face}}}}$):** = $\\mathbf{{{Mu_x_face:.2f}}} \\text{{ ton-m}} = {Mu_x_face*100000:.0f} \\text{{ kg-cm}}$")
+    st.markdown(f"* **ความกว้างหน้าตัดรับแรงดัดจริง ($b$):** = $\\mathbf{{{w_flex_x:.1f}}} \\text{{ cm}}$")
+    st.markdown(f"* **พื้นที่เหล็กเสริมขั้นต่ำต้านการยืดหดตัว ($A_{{s,\\text{{min}}}}$):** $0.0018 \\cdot b \\cdot t = 0.0018 \\times {w_flex_x:.1f} \\times {t_actual*100:.1f} = \\mathbf{{{As_min_calc_x:.2f}}} \\text{{ cm}}^2$")
+    st.markdown(f"* **พื้นที่เหล็กเสริมที่คำนวณได้จริงรวมเกณฑ์ขั้นต่ำแล้ว ($A_{{s,\\text{{required}}}}$):** = $\\mathbf{{{As_req_x:.2f}}} \\text{{ cm}}^2$")
+    st.markdown(f"* **พื้นที่หน้าตัดของเหล็กเส้นหนึ่งเส้น (DB{bar_dia}):** = $\\mathbf{{{ab_area:.3f}}} \\text{{ cm}}^2$")
+    
+    st.markdown(r"$$\text{จำนวนเส้นเหล็กที่ต้องการ: } N_{\text{bars}} = \text{ROUND\_UP}\left(\frac{A_{s,\text{required}}}{A_{\text{bar}}}\right)$$")
+    st.markdown(f"$$N_{{\\text{{bars}}}} = \\text{{ROUND\_UP}}\\left(\\frac{{{As_req_x:.2f}}}{{{ab_area:.3f}}}\\right) = \\mathbf{{{n_main_bars_x}}} \\text{{ เส้น}}$$")
+    
+    st.markdown(r"$$\text{ระยะห่างระหว่างเส้น (Spacing): } \text{Spacing} = \frac{b - 15 \text{ cm (Clearance Edge)}}{N_{\text{bars}} - 1}$$")
+    if n_main_bars_x > 1:
+        st.markdown(f"$$\\text{{Spacing}} = \\frac{{{w_flex_x:.1f} - 15}}{{{n_main_bars_x} - 1}} = \\mathbf{{{sp_main_x:.1f}}} \\text{{ cm}} \\rightarrow \\text{{ระบุ }} \\mathbf{{@{sp_main_x:.0f} \\text{{ cm}}}}$$")
+    else:
+        st.markdown("$$\\text{Spacing} = \\mathbf{45.0} \\text{ cm (Maximum Limit Specified)}$$")
