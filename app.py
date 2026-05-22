@@ -80,47 +80,92 @@ def compute_polygon_advanced_properties(vertices):
     return area, cx, cy, max(0.001, Ixx), max(0.001, Iyy), Ixy
 
 def get_polygon_section_width_at_y(target_y, vertices):
-    """หาความกว้างหน้าตัดคอนกรีต bw ที่แกน Y ใดๆ"""
+    """หาความกว้างหน้าตัดคอนกรีต bw ที่แกน Y ใดๆ (อัปเกรด Line Intersection)"""
     intersections = []
     n = len(vertices)
     for i in range(n):
         x1, y1 = vertices[i]
         x2, y2 = vertices[(i + 1) % n]
-        if min(y1, y2) <= target_y <= max(y1, y2):
-            if abs(y2 - y1) > 1e-6:
-                t = (target_y - y1) / (y2 - y1)
-                x_interp = x1 + t * (x2 - x1)
-                intersections.append(x_interp)
-            else:
-                intersections.extend([x1, x2])
-    if len(intersections) < 2: return 0.1
-    return max(intersections) - min(intersections)
+        if (y1 <= target_y and y2 > target_y) or (y2 <= target_y and y1 > target_y):
+            x_int = x1 + (target_y - y1) * (x2 - x1) / (y2 - y1)
+            intersections.append(x_int)
+    
+    if len(intersections) >= 2:
+        intersections.sort()
+        width = sum(intersections[i+1] - intersections[i] for i in range(0, len(intersections)-1, 2))
+        return max(width, 0.01)
+    return 0.01
 
 def get_polygon_section_height_at_x(target_x, vertices):
-    """หาความยาวหน้าตัดคอนกรีตที่แกน X ใดๆ (สำหรับแกน Y)"""
+    """หาความยาวหน้าตัดคอนกรีตที่แกน X ใดๆ (อัปเกรด Line Intersection)"""
     intersections = []
     n = len(vertices)
     for i in range(n):
         x1, y1 = vertices[i]
         x2, y2 = vertices[(i + 1) % n]
-        if min(x1, x2) <= target_x <= max(x1, x2):
-            if abs(x2 - x1) > 1e-6:
-                t = (target_x - x1) / (x2 - x1)
-                y_interp = y1 + t * (y2 - y1)
-                intersections.append(y_interp)
-            else:
-                intersections.extend([y1, y2])
-    if len(intersections) < 2: return 0.1
-    return max(intersections) - min(intersections)
+        if (x1 <= target_x and x2 > target_x) or (x2 <= target_x and x1 > target_x):
+            y_int = y1 + (target_x - x1) * (y2 - y1) / (x2 - x1)
+            intersections.append(y_int)
+            
+    if len(intersections) >= 2:
+        intersections.sort()
+        height = sum(intersections[i+1] - intersections[i] for i in range(0, len(intersections)-1, 2))
+        return max(height, 0.01)
+    return 0.01
 
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
+
+def point_to_segment_dist(px, py, x1, y1, x2, y2):
+    """คำนวณระยะห่างจากจุดไปยังเส้นตรง (อัปเกรดหาระยะขอบเสาเข็ม)"""
+    l2 = (x1 - x2)**2 + (y1 - y2)**2
+    if l2 == 0: return math.hypot(px - x1, py - y1)
+    t = max(0, min(1, ((px - x1)*(x2 - x1) + (py - y1)*(y2 - y1)) / l2))
+    proj_x = x1 + t * (x2 - x1)
+    proj_y = y1 + t * (y2 - y1)
+    return math.hypot(px - proj_x, py - proj_y)
+
+def calculate_b0_reduced_for_pile(px, py, pile_w, eval_d, vertices):
+    """ตรวจสอบและลดทอนค่า b0 สำหรับการทะลุรอบเสาเข็ม หากอยู่ใกล้ขอบ"""
+    dist_to_edges = []
+    n = len(vertices)
+    for i in range(n):
+        x1, y1 = vertices[i]
+        x2, y2 = vertices[(i+1)%n]
+        dist_to_edges.append(point_to_segment_dist(px, py, x1, y1, x2, y2))
+    
+    min_dist = min(dist_to_edges) if dist_to_edges else 999
+    crit_dist = (pile_w / 2) + (eval_d / 2)
+    b0_standard = 4 * (pile_w + eval_d)
+    
+    if min_dist < crit_dist:
+        if min_dist > pile_w / 2: return 3 * (pile_w + eval_d) # ทะลุขอบเดียว (Edge)
+        else: return 2 * (pile_w + eval_d) # ทะลุสองขอบ (Corner)
+    return b0_standard
+
+def get_dynamic_s_max(t_actual_m, env_condition):
+    """อัปเกรด: คืนค่าระยะห่างเหล็กเสริมสูงสุด S_max ตามข้อกำหนดสภาวะใช้งาน"""
+    t_cm = t_actual_m * 100
+    s_max_thickness = 3 * t_cm
+    s_max_absolute = 45.0
+    if "กันน้ำ" in env_condition or "กัดกร่อนสูง" in env_condition:
+        s_max_absolute = 30.0
+    return min(s_max_thickness, s_max_absolute)
+
+def evaluate_development_length(fy_ksc, fc_ksc, bar_dia_mm, available_length_m, cover_cm):
+    """อัปเกรด: ตรวจสอบระยะล้วงเหล็ก L_d ตามมาตรฐาน"""
+    db_cm = bar_dia_mm / 10.0
+    ld_cm = (fy_ksc / (2.1 * math.sqrt(fc_ksc))) * db_cm
+    ld_cm = max(ld_cm, 30.0)
+    actual_available_cm = (available_length_m * 100) - cover_cm
+    is_adequate = actual_available_cm >= ld_cm
+    return is_adequate, ld_cm, actual_available_cm
 
 # =========================================================================
 # EVALUATION ROUTINES
 # =========================================================================
 def evaluate_gergely_lutz_crack(Mu_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacing_cm):
-    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (ACI Gergely-Lutz) [SI Unitsแท้]"""
+    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน"""
     if Mu_ton_m <= 0 or As_cm2 <= 0: return 0.0
     fs_ksc = (Mu_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) 
     fs_mpa = fs_ksc * 0.0980665
@@ -135,8 +180,8 @@ def evaluate_gergely_lutz_crack(Mu_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacin
     w_crack = 11.0e-6 * beta * fs_mpa * ((dc_mm * A_eff_mm2)**(1/3))
     return w_crack
 
-def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, I_xy=0.0, phi_s=0.75):
-    """Core evaluation routine (Updated: Multi-column Punching Shear support)"""
+def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, pile_dia=0.3, I_xy=0.0, phi_s=0.75):
+    """Core evaluation routine"""
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
@@ -153,14 +198,13 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
               ((Mu_y_total * I_xx - Mu_x_total * I_xy) / denom) * prx
         p_ult_reactions.append(R_u)
         
-    # 1. Punching Shear (Updated to support multiple columns)
+    # 1. Column Punching Shear
     b1_box, b2_box = cx + eval_d, cy + eval_d
     b_0 = 2 * (b1_box + b2_box)
     A_punching_cm2 = b_0 * eval_d * 10000
     
     V_u_punching_kg = 0.0
     for idx, (px, py) in enumerate(piles_act):
-        # เช็คว่าเสาเข็มอยู่นอกระยะ Punching Shear ของ "ทุกเสา" หรือไม่
         is_outside = True
         for col_x, col_y in columns_list:
             if abs(px - col_x) <= (cx/2 + eval_d/2) and abs(py - col_y) <= (cy/2 + eval_d/2):
@@ -170,12 +214,24 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
             V_u_punching_kg += max(0.0, p_ult_reactions[idx] * 1000)
 
     v_u_punching_stress = V_u_punching_kg / A_punching_cm2 if A_punching_cm2 > 0 else 0.0
-    
     beta_ratio = max(cx, cy) / min(cx, cy) if min(cx, cy) > 0 else 1.0
     alpha_s = 40 if col_pos == "Interior" else (30 if col_pos == "Edge" else 20)
     v_c_allow_punching = phi_s * min(0.27*(2 + 4/beta_ratio)*math.sqrt(fc_prime), 0.27*(alpha_s*(eval_d*100)/(b_0*100) + 2)*math.sqrt(fc_prime), 1.06*math.sqrt(fc_prime))
     
-    # 2. Wide-Beam Shear
+    # 2. Pile Punching Shear (อัปเกรด: เช็คเข็มรายต้นและระยะขอบ)
+    v_u_pile_punching_max = 0.0
+    for idx, (px, py) in enumerate(piles_act):
+        if p_ult_reactions[idx] > 0:
+            b0_pile = calculate_b0_reduced_for_pile(px, py, pile_dia, eval_d, vertices)
+            A_punch_pile_cm2 = b0_pile * eval_d * 10000
+            if A_punch_pile_cm2 > 0:
+                stress = (p_ult_reactions[idx] * 1000) / A_punch_pile_cm2
+                v_u_pile_punching_max = max(v_u_pile_punching_max, stress)
+
+    # ใช้ค่า stress ที่สูงสุดระหว่างเสาตอม่อ หรือ เสาเข็มเดี่ยว
+    v_u_punching_stress = max(v_u_punching_stress, v_u_pile_punching_max)
+
+    # 3. Wide-Beam Shear
     cut_y_top = cy/2 + eval_d
     V_u_wb_top = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if py >= cut_y_top)
     bw_top = get_polygon_section_width_at_y(cut_y_top, vertices) * 100
@@ -192,16 +248,19 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     is_safe = (v_u_punching_stress <= v_c_allow_punching) and (v_u_wb_max <= v_c_allow_wb)
     return is_safe, v_u_punching_stress, v_c_allow_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions
 
-def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm):
-    """ออกแบบเหล็กเสริม (Updated: Dynamic Cover deduction)"""
+def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
+    """ออกแบบเหล็กเสริม (พร้อมระบบ Dynamic Spacing)"""
     width_cm = max(width_cm, 30.0)
     As_min = 0.0018 * width_cm * t_cm
-    cover_deduction = cover_cm * 2 # หักระยะหุ้ม 2 ฝั่ง
+    cover_deduction = cover_cm * 2 
+
+    # อัปเกรด: ใช้ Dynamic Spacing Limit
+    s_max = get_dynamic_s_max(t_cm / 100, env_cond)
 
     if Mu_ton_m <= 0 or d_cm <= 0:
         n_bars = max(math.ceil(As_min / ab_area), 4)
         spacing = math.floor((width_cm - cover_deduction) / (n_bars - 1)) if n_bars > 1 else 15
-        return n_bars, min(spacing, 45.0), False, As_min
+        return n_bars, min(spacing, s_max), False, As_min
         
     Mu_kg_cm = Mu_ton_m * 1000 * 100
     Rn = Mu_kg_cm / (phi_flex * width_cm * d_cm**2)
@@ -212,7 +271,7 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
     As_req = max(rho * width_cm * d_cm, As_min)
     n_bars = max(math.ceil(As_req / ab_area), 4)
     spacing = math.floor((width_cm - cover_deduction) / (n_bars - 1)) if n_bars > 1 else 15
-    return n_bars, min(spacing, 45.0), False, As_req
+    return n_bars, min(spacing, s_max), False, As_req
 
 # =========================================================================
 # VISUALIZATION FUNCTIONS 
@@ -520,7 +579,7 @@ if thickness_mode == "Auto-Optimize":
         loop_counter += 1
         t_opt = d_opt + (concrete_cover_cm/100) + (pile_embed_cm/100) + ((bar_dia/1000)/2)
         safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
-            d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, I_xy=I_xy_geom
+            d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom
         )
         if safe: break
         d_opt += step
@@ -534,7 +593,7 @@ else:
     t_actual = manual_t
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
     safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
-        d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, I_xy=I_xy_geom
+        d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom
     )
 
 polar_R_sum = sum(prx**2 + pry**2 for prx, pry in piles_relative)
@@ -569,7 +628,7 @@ Mu_x_bot = abs(sum(p_ult_out[i] * (abs(p[1]) - cy/2) for i, p in enumerate(piles
 Mu_x_max = max(Mu_x_top, Mu_x_bot)
 
 w_flex_x = get_polygon_section_width_at_y(0, concrete_vertices) * 100
-n_bars_x, sp_x, _, as_req_x = design_rebar_by_axis(Mu_x_max, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area, concrete_cover_cm)
+n_bars_x, sp_x, _, as_req_x = design_rebar_by_axis(Mu_x_max, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area, concrete_cover_cm, env_cond=environmental_condition)
 
 Mu_y_top = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
 Mu_y_bot = abs(sum(p_ult_out[i] * (abs(p[0]) - cx/2) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
@@ -579,11 +638,20 @@ w_flex_left = get_polygon_section_height_at_x(-cx/2.0, concrete_vertices) * 100
 w_flex_right = get_polygon_section_height_at_x(cx/2.0, concrete_vertices) * 100
 w_flex_y = min(w_flex_left, w_flex_right)
 
-n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max, w_flex_y, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area, concrete_cover_cm)
+n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max, w_flex_y, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area, concrete_cover_cm, env_cond=environmental_condition)
 
 calculated_w = evaluate_gergely_lutz_crack(Mu_x_max, n_bars_x * ab_area, d_actual*100, concrete_cover_cm, bar_dia, sp_x)
 
 st.markdown("---")
+
+# =========================================================================
+# NEW: L_d WARNING SECTION
+# =========================================================================
+max_cantilever_x = max([abs(v[0]) for v in concrete_vertices]) - cx/2
+is_ld_ok, req_ld_cm, act_ld_cm = evaluate_development_length(fy, fc_prime, bar_dia, max_cantilever_x, concrete_cover_cm)
+
+if not is_ld_ok:
+    st.warning(f"⚠️ **แจ้งเตือนระยะล้วงเกาะ (Development Length):** ระยะยื่นฐานรากฝั่งวิกฤตสั้นเกินไป (ต้องการ $L_d$ = {req_ld_cm:.1f} cm แต่มีระยะเพียง {act_ld_cm:.1f} cm) ระบบแนะนำให้ออกแบบเป็น**งอขอมาตรฐาน (Standard Hook)** หรือปรับขยายขนาดขอบเขตฐานราก")
 
 # =========================================================================
 # DISPLAY & INTERFACE REPORT (REFACTORED WITH TABS)
