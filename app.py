@@ -539,23 +539,52 @@ with tab3:
     st.markdown("Design Standard Reference: **ACI 318-19 / DPT 1301/1302-61**")
     st.markdown("---")
     
-    st.markdown("#### 🏗️ Pile Group Mechanics and Stress Distribution")
-    st.markdown(r"$$\text{Governing Equation: } R_i = \frac{P_{total}}{n} \pm \frac{M_{y,total} \cdot x_i}{I_{yy}} \pm \frac{M_{x,total} \cdot y_i}{I_{xx}}$$")
+    # -------------------------------------------------------------------------
+    # SECTION 1: FACTORED LOADS & COMBINED FORCES
+    # -------------------------------------------------------------------------
+    st.markdown("#### 🏗️ 1. Factored Axial Loads & Moments Calculation")
+    st.markdown("คำนวณน้ำหนักบรรทุกประลัยรวม โดยพิจารณาน้ำหนักบรรทุกจากโครงสร้าง น้ำหนักฐานราก และน้ำหนักดินถมทับ (Load Factor = 1.2)")
+    
+    # คำนวณตัวแปรสำหรับแสดงผลตัวเลขที่มาที่ไป
+    w_u_footing_weight = 1.2 * (footing_area * t_actual * 2.4)
+    w_u_soil_weight = 1.2 * W_soil
+    P_total_factored_calc = P_ultimate + w_u_footing_weight + w_u_soil_weight
+    Mu_x_total_calc = Mu_cx + (P_total_factored_calc * (-ecc_y))
+    Mu_y_total_calc = Mu_cy + (P_total_factored_calc * (-ecc_x))
+    
+    st.markdown(r"$$\text{สูตรน้ำหนักรวมประลัย: } P_{u,\text{total}} = P_{u,\text{structure}} + 1.2 \cdot (W_{\text{footing}} + W_{\text{soil}})$$")
+    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + 1.2 \cdot ({footing_area:.2f} \times {t_actual:.2f} \times 2.4) + 1.2 \cdot ({W_soil:.2f})$$")
+    st.markdown(f"$$P_{{u,\text{{total}}}} = {P_ultimate:.2f} + {w_u_footing_weight:.2f} + {w_u_soil_weight:.2f} = \mathbf{{{P_total_factored_calc:.2f}}} \text{{ tons}}$$")
+    
+    st.markdown(r"$$\text{สูตรโมเมนต์ประลัยรวมพิจารณาความเยื้องศูนย์: } M_{u,\text{total}} = M_{u,\text{column}} + (P_{u,\text{total}} \cdot e)$$")
+    st.markdown(f"$$M_{{ux,\text{{total}}}} = {Mu_cx:.2f} + ({P_total_factored_calc:.2f} \cdot {-ecc_y:.3f}) = \mathbf{{{Mu_x_total_calc:.2f}}} \text{{ ton-m}}$$")
+    st.markdown(f"$$M_{{uy,\text{{total}}}} = {Mu_cy:.2f} + ({P_total_factored_calc:.2f} \cdot {-ecc_x:.3f}) = \mathbf{{{Mu_y_total_calc:.2f}}} \text{{ ton-m}}$$")
+    
+    st.markdown("---")
+    
+    # -------------------------------------------------------------------------
+    # SECTION 2: PILE GROUP MECHANICS
+    # -------------------------------------------------------------------------
+    st.markdown("#### 🪵 2. Pile Group Mechanics and Stress Distribution")
+    st.markdown("การกระจายแรงปฏิกิริยาลงเสาเข็มแต่ละต้นโดยอ้างอิงคุณสมบัติหน้าตัดเชิงเรขาคณิตของกลุ่มเข็มจริงหน้างาน (As-Built)")
+    st.markdown(r"$$\text{Governing Equation: } R_i = \frac{P_{\text{total}}}{n} \pm \frac{M_{y,\text{total}} \cdot x_i}{I_{yy}} \pm \frac{M_{x,\text{total}} \cdot y_i}{I_{xx}}$$")
     
     col_v1, col_v2 = st.columns(2)
     with col_v1:
         st.markdown(f"""
         **Geometric Sectional Properties:**
-        * Number of piles ($n$): `{n_piles}` piles
-        * Pile Profile Config: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
-        * Group $I_{{xx}}$ / $I_{{yy}}$: `{I_xx_group:.4f}` / `{I_yy_group:.4f}` m²
-        * Eccentricity ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
+        * จำนวนเสาเข็มในกลุ่ม ($n$): `{n_piles}` ต้น
+        * หน้าตัดเสาเข็มที่ใช้: **{pile_shape}** ({pile_w:.3f}m x {pile_l:.3f}m)
+        * Moment of Inertia ของกลุ่มเข็ม $I_{{xx}}$: `{I_xx_group:.4f}` m²
+        * Moment of Inertia ของกลุ่มเข็ม $I_{{yy}}$: `{I_yy_group:.4f}` m²
+        * ระยะเยื้องศูนย์ของกลุ่มเข็ม ($\\Delta X, \\Delta Y$): `({-ecc_x:.3f}, {-ecc_y:.3f})` m
         """)
     with col_v2:
         st.markdown(f"""
-        **Combined External Forces:**
-        * Axial ultimate load: `{(P_ultimate + 1.2*(w_s_footing + W_soil)):.2f}` tons
-        * Ult. moment X / Y: `{Mu_cx + (P_ultimate + 1.2*(w_s_footing + W_soil))*(-ecc_y):.2f}` / `{Mu_cy + (P_ultimate + 1.2*(w_s_footing + W_soil))*(-ecc_x):.2f}` ton-m
+        **Combined External Forces (Factored):**
+        * น้ำหนักประลัยรวมแนวดิ่ง ($P_{{u,\\text{{total}}}}$): `{P_total_factored_calc:.2f}` tons
+        * โมเมนต์ประลัยดัดแกน X ($M_{{ux,\\text{{total}}}}$): `{Mu_x_total_calc:.2f}` ton-m
+        * โมเมนต์ประลัยดัดแกน Y ($M_{{uy,\\text{{total}}}}$): `{Mu_y_total_calc:.2f}` ton-m
         """)
 
     pile_results_detailed = []
@@ -563,43 +592,73 @@ with tab3:
         p_status = "✅ Pass" if -pile_tension_cap <= pile_service_reactions[i] <= pile_cap else "❌ Overstressed"
         pile_results_detailed.append({
             "Pile Name": f"P{i+1}",
-            "Actual X/Y (m)": f"{round(piles_relative[i][0], 3)} / {round(piles_relative[i][1], 3)}",
+            "As-Built X (m)": round(piles_relative[i][0], 3),
+            "As-Built Y (m)": round(piles_relative[i][1], 3),
             "Service Load (t)": round(pile_service_reactions[i], 2),
             "Ult. Load (t)": round(p_ult_out[i], 2),
+            "Allowable Cap (t)": pile_cap,
             "Status": p_status
         })
     st.dataframe(pd.DataFrame(pile_results_detailed), use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.markdown("#### 📐 Critical Shear Stress Analysis")
-    safe_b0 = b_0_len*100 if b_0_len > 0 else 1.0
-    safe_d = d_actual*100 if d_actual > 0 else 1.0
-    safe_bw = bw_y_width*100 if bw_y_width > 0 else 1.0
     
-    st.markdown(f"**📌 Punching Shear:** $v_u = \\frac{{{Vu_punch_kg:.1f}}}{{{safe_b0:.1f} \\times {safe_d:.1f}}} = {v_up:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cp:.2f} \\text{{ ksc}}$")
-    if v_up <= v_cp: st.success("✅ **Safe:** Punching shear passed.")
-    else: st.error("❌ **Unsafe:** Punching shear exceeds limits.")
+    # -------------------------------------------------------------------------
+    # SECTION 3: CRITICAL SHEAR STRESS ANALYSIS
+    # -------------------------------------------------------------------------
+    st.markdown("#### 📐 3. Critical Shear Stress Analysis")
+    safe_b0 = b_0_len * 100 if b_0_len > 0 else 1.0
+    safe_d = d_actual * 100 if d_actual > 0 else 1.0
+    safe_bw = bw_y_width * 100 if bw_y_width > 0 else 1.0
+    
+    st.markdown("**A) การตรวจสอบแรงเฉือนทะลุ (Punching Shear Check)**")
+    st.markdown("พิจารณาพื้นที่วิกฤตโดยรอบห่างจากขอบเสาตอม่อเท่ากับระยะ $d/2$")
+    st.markdown(r"$$\text{สูตรหน่วยแรงเฉือนทะลุ: } v_u = \frac{V_{\text{u,punch}}}{b_0 \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_punch_kg:,.1f} \\text{{ kg}}}}{{{safe_b0:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_up:.2f}}} \\text{{ ksc}}$$")
+    st.markdown(f"$$\\text{{กำลังรับแรงเฉือนคอนกรีตที่ยอมให้: }} \\phi v_c = \\mathbf{{{v_cp:.2f}}} \\text{{ ksc}}$$")
+    if v_up <= v_cp: 
+        st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_up:.2f} $\\le$ {v_cp:.2f} ksc) โครงสร้างปลอดภัยต่อการเจาะทะลุ")
+    else: 
+        st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_up:.2f} > {v_cp:.2f} ksc) เสี่ยงต่อการวิบัติแบบเจาะทะลุ! ต้องเพิ่มความหนาฐานราก")
 
-    st.markdown(f"**📌 Wide-Beam Shear:** $v_u = \\frac{{{Vu_wb_kg:.1f}}}{{{safe_bw:.1f} \\times {safe_d:.1f}}} = {v_uwb:.2f} \\text{{ ksc}} \\le \\phi v_c = {v_cwb:.2f} \\text{{ ksc}}$")
-    if v_uwb <= v_cwb: st.success("✅ **Safe:** Wide-beam shear passed.")
-    else: st.error("❌ **Unsafe:** Wide-beam shear exceeds limits.")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("**B) การตรวจสอบแรงเฉือนแบบคานกว้าง (Wide-Beam Shear Check)**")
+    st.markdown("พิจารณาหน้าตัดวิกฤตตามแนวกว้างของฐานราก ห่างจากขอบเสาตอม่อเป็นระยะ $d$")
+    st.markdown(r"$$\text{สูตรหน่วยแรงเฉือนคานกว้าง: } v_u = \frac{V_{\text{u,wb}}}{b_w \cdot d}$$")
+    st.markdown(f"$$v_u = \\frac{{{Vu_wb_kg:,.1f} \\text{{ kg}}}}{{{safe_bw:.1f} \\text{{ cm}} \\times {safe_d:.1f} \\text{{ cm}}}} = \\mathbf{{{v_uwb:.2f}}} \\text{{ ksc}}$$")
+    st.markdown(f"$$\\text{{กำลังรับแรงเฉือนคอนกรีตที่ยอมให้: }} \\phi v_c = \\mathbf{{{v_cwb:.2f}}} \\text{{ ksc}}$$")
+    if v_uwb <= v_cwb: 
+        st.success(f"✅ **Safe:** $v_u \\le \\phi v_c$ ({v_uwb:.2f} $\\le$ {v_cwb:.2f} ksc) โครงสร้างปลอดภัยต่อแรงเฉือนคานกว้าง")
+    else: 
+        st.error(f"❌ **Unsafe:** $v_u > \\phi v_c$ ({v_uwb:.2f} > {v_cwb:.2f} ksc) แรงเฉือนเกินพิกัดคอนกรีต!")
 
     st.markdown("---")
-    st.markdown("#### 📐 Flexural Design and Rebar Layout")
+    
+    # -------------------------------------------------------------------------
+    # SECTION 4: FLEXURAL DESIGN & REBAR LAYOUT
+    # -------------------------------------------------------------------------
+    st.markdown("#### 🥩 4. Flexural Design and Rebar Layout")
+    st.markdown("คำนวณหาปริมาณเหล็กเสริมต้านแรงดัดประลัยวิกฤตที่บริเวณขอบเสาตอม่อ โดยเปรียบเทียบกับเหล็กเสริมขั้นต่ำตามมาตรฐานคอนกรีตโครงสร้าง")
+    
     df_rebar = pd.DataFrame({
-        "Axis": ["X-Axis (Main)", "Y-Axis (Transverse)"],
-        "Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
-        "Req. As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
-        "Provided": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
-        "Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
+        "Axis Direction": ["X-Axis (Main Rebar)", "Y-Axis (Transverse Rebar)"],
+        "Critical Moment Mu (t-m)": [round(Mu_x_face, 2), round(Mu_y_face, 2)],
+        "Required As (cm²)": [round(As_req_x, 2), round(As_req_y, 2)],
+        "Provided Rebar Spec": [f"{n_main_bars_x} - DB{bar_dia}", f"{n_main_bars_y} - DB{bar_dia}"],
+        "Calculated Spacing": [f"@{sp_main_x:.0f} cm", f"@{sp_main_y:.0f} cm"]
     })
     st.dataframe(df_rebar, use_container_width=True, hide_index=True)
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("**C) การตรวจสอบระยะฝังยึดเหล็กเสริมหลัก (Development Length Check)**")
     l_d_required = (fy / (1.1 * 1.0 * math.sqrt(fc_prime))) * (bar_dia / 10)
     available_length_x = ((B_ft - cx) / 2) * 100 - concrete_cover_cm
     
-    st.markdown(f"**Development Length Check:** Required $L_d$ = {l_d_required:.1f} cm | Available = {available_length_x:.1f} cm")
+    st.markdown(r"$$\text{สูตรระยะฝังยึดตามมาตรฐาน: } L_d = \left(\frac{f_y}{1.1 \cdot \sqrt{f_c'}}\right) \cdot d_b$$")
+    st.markdown(f"* ระยะฝังยึดที่ต้องการตามทฤษฎี ($L_d$): **{l_d_required:.1f}** cm (คำนวณจากแรงดึงประลัย)")
+    st.markdown(f"* ระยะความยาวฝังเหล็กที่มีจริงในฐานราก ($L_{{\\text{{available}}}}$): **{available_length_x:.1f}** cm")
+    
     if available_length_x >= l_d_required:
-        st.success("✅ **Pass:** Straight embedment is sufficient. 90-degree hooks not required.")
+        st.success(f"✅ **Pass:** ระยะฝังที่มีจริง ({available_length_x:.1f} cm) มีค่ามากกว่าตัวเลขที่ต้องการ ({l_d_required:.1f} cm) ปลายเหล็กสามารถจัดวางแบบดัดตรงได้เลย")
     else:
-        st.warning("⚠️ **Warning:** Standard 90-Degree Hooks are required due to insufficient embedment.")
+        st.warning(f"⚠️ **Warning:** ระยะฝังยึดคอนกรีตไม่เพียงพอตามเกณฑ์ทฤษฎี ({available_length_x:.1f} cm < {l_d_required:.1f} cm) **ต้องทำการงอฉากปลายเหล็กเสริม 90 องศา (Standard Hooks)** เพื่อความปลอดภัย")
