@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V8.0", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V8.1", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -40,7 +40,7 @@ def initialize_thai_font_system():
 current_thai_font = initialize_thai_font_system()
 
 # =========================================================================
-# HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION - FROM V7.9)
+# HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION)
 # =========================================================================
 def polygon_area(vertices):
     """คำนวณพื้นที่รูปหลายเหลี่ยมใดๆ (Polygon Area)"""
@@ -124,22 +124,34 @@ def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
     return t_total - (cover_cm / 100) - (embed_cm / 100) - ((bar_dia_mm / 1000) / 2)
 
 # =========================================================================
-# NEW ADVANCED ADDITIONS: SERVICEABILITY CRACK CONTROL (GERGELY-LUTZ)
+# V8.1 FIX 1: SERVICEABILITY CRACK CONTROL (GERGELY-LUTZ IN SI UNITS)
 # =========================================================================
 def evaluate_gergely_lutz_crack(Mu_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacing_cm):
-    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (ACI Gergely-Lutz) [SI Units]"""
+    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (ACI Gergely-Lutz) [SI Unitsแท้]"""
     if Mu_ton_m <= 0 or As_cm2 <= 0: return 0.0
-    fs = (Mu_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) # Service Stress Approximation (ksc)
-    if fs > 0.6 * 4000: fs = 0.6 * 4000
-    dc = cover_cm + (bar_mm / 20)
-    A_eff = 2 * dc * (spacing_cm if spacing_cm > 0 else 15.0)
+    
+    fs_ksc = (Mu_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) # Service Stress Approximation (ksc)
+    
+    # แปลงหน่วย fs จาก ksc เป็น MPa
+    fs_mpa = fs_ksc * 0.0980665
+    fy_mpa = 400.0
+    # จำกัดค่า fs ไม่ให้เกิน 0.6 fy
+    if fs_mpa > 0.6 * fy_mpa: 
+        fs_mpa = 0.6 * fy_mpa
+        
+    # แปลง dc และ spacing เป็น mm
+    dc_mm = (cover_cm * 10.0) + (bar_mm / 2.0)
+    s_mm = (spacing_cm * 10.0) if spacing_cm > 0 else 150.0
+    
+    A_eff_mm2 = 2.0 * dc_mm * s_mm
     beta = 1.20
-    # ACI SI equation outputting mm
-    w_crack = 11e-6 * beta * (fs * 0.09806) * (dc * A_eff * 1000)**(1/3)
+    
+    # Gergely-Lutz SI Equation: 11.0e-6 -> ผลลัพธ์เป็น mm
+    w_crack = 11.0e-6 * beta * fs_mpa * ((dc_mm * A_eff_mm2)**(1/3))
     return w_crack
 
 # =========================================================================
-# VISUALIZATION FUNCTIONS (FROM V7.9)
+# VISUALIZATION FUNCTIONS 
 # =========================================================================
 def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l, columns_list=[(0,0)]):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -224,13 +236,13 @@ def generate_rebar_detailing_view(t_actual, b_max, cover_cm, embed_cm, bar_dia, 
     
     ax.set_xlim(-b_max/2 - 0.5, b_max/2 + 0.5)
     ax.set_ylim(-0.5, t_actual + 0.7)
-    ax.set_title(f'รูปขยายการเสริมเหล็ก V8.0 ({n_bars_x}-DB{bar_dia} @ {sp_x:.0f} cm)', fontsize=12, fontweight='bold')
+    ax.set_title(f'รูปขยายการเสริมเหล็ก V8.1 ({n_bars_x}-DB{bar_dia} @ {sp_x:.0f} cm)', fontsize=12, fontweight='bold')
     ax.axis('off')
     ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
     return fig
 
 # =========================================================================
-# CORE EVALUATION ROUTINE (FROM V7.9 INTEGRATED WITH ADVANCED Ixy & LATERAL)
+# CORE EVALUATION ROUTINE (ADVANCED Ixy & LATERAL)
 # =========================================================================
 def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, I_xy=0.0, phi_s=0.75):
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
@@ -298,6 +310,9 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
     spacing = math.floor((width_cm - 15) / (n_bars - 1)) if n_bars > 1 else 15
     return n_bars, min(spacing, 45.0), False, As_req
 
+# =========================================================================
+# V8.1 FIX 5: Z-AXIS COORDINATE FIX FOR 3D INTERACTIVE MESH
+# =========================================================================
 @st.cache_data(show_spinner=False)
 def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tuple, pile_shape, pile_w, pile_l, embed_m):
     concrete_vertices = list(concrete_vertices_tuple)
@@ -317,20 +332,36 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
         return go.Mesh3d(x=x_coords, y=y_coords, z=z_coords, i=i_idx, j=j_idx, k=k_idx, color=face_color, opacity=opacity, name=name, showlegend=show_legend)
 
     fig_3d = go.Figure()
-    fig_3d.add_trace(create_3d_prism_trace(concrete_vertices, 0, t_actual, '#2ecc71', 0.5, 'คอนกรีตฐานราก'))
     
+    # เซ็ตพิกัด Z ให้สมจริง: ท็อปฐานรากคือ 0, ใต้ท้องฐานรากคือ -t_actual
+    footing_bottom_z = -t_actual
+    pile_top_z = footing_bottom_z + embed_m
+    pile_bottom_z = footing_bottom_z - 1.0 # ความยาวเสาเข็มที่แสดงผล
+    
+    # คอนกรีตฐานราก
+    fig_3d.add_trace(create_3d_prism_trace(concrete_vertices, footing_bottom_z, 0, '#2ecc71', 0.5, 'คอนกรีตฐานราก'))
+    
+    # เสาตอม่อ (ยื่นขึ้นจาก 0 ไป 0.5 ม.)
     column_vertices = [(-cx/2, -cy/2), (cx/2, -cy/2), (cx/2, cy/2), (-cx/2, cy/2)]
-    fig_3d.add_trace(create_3d_prism_trace(column_vertices, t_actual, t_actual + 0.50, '#e74c3c', 0.7, 'เสาตอม่อ'))
+    fig_3d.add_trace(create_3d_prism_trace(column_vertices, 0, 0.50, '#e74c3c', 0.7, 'เสาตอม่อ'))
     
-    fig_3d.add_trace(go.Scatter3d(
-        x=[p[0] for p in piles_actual],
-        y=[p[1] for p in piles_actual],
-        z=[0]*len(piles_actual),
-        mode='markers+text',
-        marker=dict(size=10, color='#34495e', symbol='circle'), # แก้ไขจุดบกพร่องเรื่อง symbol แล้ว
-        text=[f"P{i+1}" for i in range(len(piles_actual))],
-        name='เสาเข็ม As-Built'
-    ))
+    # เสาเข็ม As-Built
+    for index, p in enumerate(piles_actual):
+        px, py = p[0], p[1]
+        
+        # วาดเส้นทรงกระบอกแกนดิ่งแทนตัวเสาเข็ม
+        fig_3d.add_trace(go.Scatter3d(
+            x=[px, px], y=[py, py], z=[pile_bottom_z, pile_top_z],
+            mode='lines', line=dict(color='gray', width=8),
+            name=f"Pile P{index+1}", showlegend=False
+        ))
+        # พล็อตจุดตำแหน่งหัวเสาเข็ม
+        fig_3d.add_trace(go.Scatter3d(
+            x=[px], y=[py], z=[pile_top_z],
+            mode='markers+text', marker=dict(size=6, color='#2c3e50', symbol='circle'),
+            text=[f"P{index+1}"], textposition="top center",
+            name=f"หัวเข็ม P{index+1}", showlegend=False
+        ))
 
     fig_3d.update_layout(scene=dict(aspectmode='data'), margin=dict(l=0, r=0, b=0, t=30))
     return fig_3d
@@ -339,7 +370,7 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # APPLICATION LAYOUT & UI SIGNATURE
 # =========================================================================
 with st.sidebar:
-    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V8.0")
+    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V8.1")
     footing_shape_type = st.selectbox("รูปทรงเรขาคณิตและชนิดฐานราก:", 
         ["Truncated Triangular Footing", "Rectangular Footing", "Combined Footing (>= 2 Columns)", "Strap Footing (ชิดเขต)", "Arbitrary Freeform Polygon"], index=0)
     col_position = st.selectbox("ตำแหน่งเสาตอม่อ (Column Position):", ["Interior", "Edge", "Corner"], index=0)
@@ -368,8 +399,7 @@ with st.sidebar:
     S_dist = 3.0 * pile_w
     E_dist = 0.40 
 
-    # เรขาคณิตคำนวณฐานเดิม + ชนิดฐานรากเพิ่มเข้ามาใหม่
-    columns_list = [(0.0, 0.0)] # ค่าตั้งต้นเสาเดี่ยวตรงกลาง
+    columns_list = [(0.0, 0.0)]
     I_xy_geom = 0.0
     
     if footing_shape_type == "Truncated Triangular Footing":
@@ -408,14 +438,13 @@ with st.sidebar:
         st.info("🔗 โมดูลระบบคานรัดส่งถ่ายโมเมนต์สมดุล")
         n_piles = 4
         piles_ideal = [(-1.5, -0.5), (-1.5, 0.5), (1.5, -0.5), (1.5, 0.5)]
-        columns_list = [(-1.8, 0.0), (1.5, 0.0)] # เสานอกอยู่ชิดขอบเขตเยื้องศูนย์
+        columns_list = [(-1.8, 0.0), (1.5, 0.0)] 
         concrete_vertices_base = [(-2.3, -1.0), (2.3, -1.0), (2.3, 1.0), (-2.3, 1.0)]
         B_max_visual = 4.6
-    else: # Arbitrary Freeform Polygon
+    else: 
         st.info("🗺️ ปลดล็อกวาดรูปทรงอิสระ (ระบุจุดต่อจุด)")
         n_piles = 4
         piles_ideal = [(-0.8, -0.8), (0.8, -0.8), (0.8, 0.8), (-0.8, 0.8)]
-        # สร้างรูปทรงตัว L เป็นรูปทรงฐานรากตัวอย่างอิสระ
         concrete_vertices_base = [(-1.5, 1.5), (0.5, 1.5), (0.5, -0.5), (1.5, -0.5), (1.5, -1.5), (-1.5, -1.5)]
         _, _, _, _, _, I_xy_geom = compute_polygon_advanced_properties(concrete_vertices_base)
         B_max_visual = 3.0
@@ -441,25 +470,46 @@ phi_shear, phi_flexure = 0.75, 0.90
 ab_area = (math.pi * (bar_dia / 10) ** 2) / 4 
 
 # =========================================================================
-# MAIN DATA PROCESSING FLOW (FROM V7.9 INTEGRATED WITH ADVANCED FEATURES)
+# MAIN DATA PROCESSING FLOW 
 # =========================================================================
 st.markdown("### 📍 1. การวิเคราะห์ As-Built Field Survey เข็มตอม่อ")
 st.info("💡 **ระบบวิเคราะห์ความปลอดภัยเชิงพิกัดร่วม:** โค้ดจะดักจับแรงเยื้องศูนย์จริงรวมกับผลของแรงแผ่นดินไหว/แรงลมแนวราบ")
 
-df_initial = pd.DataFrame({
-    'ชื่อเข็ม': [f"P{i+1}" for i in range(n_piles)],
-    'Ideal X (ม.)': [round(p[0], 3) for p in piles_ideal],
-    'Ideal Y (ม.)': [round(p[1], 3) for p in piles_ideal],
-    'ΔX (ม.) - หน้างาน': [0.00] * n_piles,
-    'ΔY (ม.) - หน้างาน': [0.00] * n_piles
-})
+# =========================================================================
+# V8.1 FIX 2: UI STATE PERSISTENCE & GUARD CLAUSE
+# =========================================================================
+if "prev_footing" not in st.session_state:
+    st.session_state.prev_footing = footing_shape_type
+    st.session_state.prev_piles = n_piles
+    st.session_state.pile_data = pd.DataFrame({
+        'ชื่อเข็ม': [f"P{i+1}" for i in range(n_piles)],
+        'Ideal X (ม.)': [round(p[0], 3) for p in piles_ideal],
+        'Ideal Y (ม.)': [round(p[1], 3) for p in piles_ideal],
+        'ΔX (ม.) - หน้างาน': [0.00] * n_piles,
+        'ΔY (ม.) - หน้างาน': [0.00] * n_piles
+    })
+
+# Guard Clause เช็คความเปลี่ยนแปลงจาก Sidebar
+if (st.session_state.prev_footing != footing_shape_type) or (st.session_state.prev_piles != n_piles):
+    st.session_state.prev_footing = footing_shape_type
+    st.session_state.prev_piles = n_piles
+    st.session_state.pile_data = pd.DataFrame({
+        'ชื่อเข็ม': [f"P{i+1}" for i in range(n_piles)],
+        'Ideal X (ม.)': [round(p[0], 3) for p in piles_ideal],
+        'Ideal Y (ม.)': [round(p[1], 3) for p in piles_ideal],
+        'ΔX (ม.) - หน้างาน': [0.00] * n_piles,
+        'ΔY (ม.) - หน้างาน': [0.00] * n_piles
+    })
+
+# ใช้ Static Key ร่วมกับ st.session_state ป้องกัน Widget Destruction
 edited_df = st.data_editor(
-    df_initial, 
+    st.session_state.pile_data, 
     disabled=['ชื่อเข็ม', 'Ideal X (ม.)', 'Ideal Y (ม.)'], 
     hide_index=True, 
     use_container_width=True,
-    key=f"piles_editor_{footing_shape_type}_{n_piles}"
+    key="static_piles_editor_key" 
 )
+st.session_state.pile_data = edited_df
 
 piles_actual = []
 for _, row in edited_df.iterrows():
@@ -473,7 +523,6 @@ piles_relative = [(p[0] - cg_actual_x, p[1] - cg_actual_y) for p in piles_actual
 I_yy_group = max(0.001, sum(p[0]**2 for p in piles_relative))
 I_xx_group = max(0.001, sum(p[1]**2 for p in piles_relative))
 
-# เพิ่มกลไกการคำนวณสติฟเนสเพื่อเช็ค Rigid Method ขอบข่ายเบื้องต้น
 E_c = 4700 * math.sqrt(fc_prime) * 10
 t_check = manual_t if thickness_mode == "Manual Override" else 0.65
 rigidity_index = (E_c * t_check**3) / 12
@@ -489,20 +538,29 @@ concrete_vertices = [(v[0] - ecc_x, v[1] - ecc_y) for v in concrete_vertices_bas
 footing_area = polygon_area(concrete_vertices)
 W_soil = max(0.0, footing_area - (cx*cy)) * soil_depth * soil_density
 
-# การประมวลผลความหนา
+# =========================================================================
+# V8.1 FIX 3: INFINITE LOOP VERIFICATION 
+# =========================================================================
 if thickness_mode == "Auto-Optimize":
     d_opt = 0.30; safe = False; p_ult_out = [0.0] * n_piles
-    while d_opt < 3.0:
+    
+    max_d = 3.0
+    step = 0.02
+    loop_counter = 0
+    max_loops = int((max_d - 0.30) / step) + 10 # บัฟเฟอร์ป้องกันลูปค้าง
+    
+    while d_opt <= max_d and loop_counter < max_loops:
+        loop_counter += 1
         t_opt = d_opt + (concrete_cover_cm/100) + (pile_embed_cm/100) + ((bar_dia/1000)/2)
         safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
             d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, I_xy=I_xy_geom
         )
         if safe: break
-        d_opt += 0.02
+        d_opt += step
         
     if not safe:
-        st.error("❌ ไม่พบความหนาที่ปลอดภัย (Safe Thickness) ภายในข้อจำกัด 3.0 เมตร กรุณาตรวจสอบการรับน้ำหนักหรือปรับขนาดฐานราก")
-        st.stop()
+        st.error("🚨 วิกฤต: ไม่สามารถหาความหนาฐานรากที่ปลอดภัยได้ (ความหนาชนขีดจำกัดสูงสุด 3.0 m หรือเกินจำนวนรอบคำนวณ) อาจเกิดจากแรงเฉือนทะลุหรือแรงเยื้องศูนย์สูงเกินไป แนะนำให้ขยายขนาดขอบเขตฐานราก (Footing Plan Dimensions) หรือเพิ่มจำนวนเสาเข็ม")
+        st.stop() # หลุดลูปอย่างปลอดภัย
         
     t_actual = math.ceil(t_opt * 20) / 20; d_actual = d_opt
 else:
@@ -512,7 +570,6 @@ else:
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, I_xy=I_xy_geom
     )
 
-# คำนวณการกระจายแรงเฉือนระดับแนวราบรายต้น (Horizontal Shear Distribution)
 polar_R_sum = sum(prx**2 + pry**2 for prx, pry in piles_relative)
 if polar_R_sum == 0: polar_R_sum = 1.0
 
@@ -548,12 +605,18 @@ Mu_x_max = max(Mu_x_top, Mu_x_bot)
 w_flex_x = get_polygon_section_width_at_y(0, concrete_vertices) * 100
 n_bars_x, sp_x, _, as_req_x = design_rebar_by_axis(Mu_x_max, w_flex_x, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
-# คำนวณโมเมนต์ดัดออกแบบเหล็กเสริม (Y-Axis)
+# =========================================================================
+# V8.1 FIX 4: TWO-WAY ACTION EFFECTIVE WIDTH FOR Y-AXIS 
+# =========================================================================
 Mu_y_top = abs(sum(p_ult_out[i] * (p[0] - cx/2) for i, p in enumerate(piles_actual) if p[0] > cx/2))
 Mu_y_bot = abs(sum(p_ult_out[i] * (abs(p[0]) - cx/2) for i, p in enumerate(piles_actual) if p[0] < -cx/2))
 Mu_y_max = max(Mu_y_top, Mu_y_bot)
 
-w_flex_y = get_polygon_section_height_at_x(0, concrete_vertices) * 100
+# ตรวจสอบความกว้างหน้าตัดที่ขอบผิวเสาทั้งสองฝั่ง (ซ้ายและขวา) แล้วเลือกค่าต่ำสุด
+w_flex_left = get_polygon_section_height_at_x(-cx/2.0, concrete_vertices) * 100
+w_flex_right = get_polygon_section_height_at_x(cx/2.0, concrete_vertices) * 100
+w_flex_y = min(w_flex_left, w_flex_right)
+
 n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max, w_flex_y, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area)
 
 # ตรวจสอบขีดจำกัดรอยร้าวหน้าตัดวิกฤต (Crack Control Validation)
@@ -567,7 +630,6 @@ st.markdown("---")
 tab_report, tab_visuals = st.tabs(["📊 2. รายงานผลการวิเคราะห์ & Serviceability", "🗺️ 3. Engineering Visual Twin Plots (2D/3D)"])
 
 with tab_report:
-    # ------------------ ADDITION: TENSION SAFETY WARNING ------------------
     tension_warnings = []
     for idx, r_s in enumerate(pile_service_reactions):
         if r_s < 0 and abs(r_s) > pile_tension_cap:
@@ -575,7 +637,6 @@ with tab_report:
             
     if tension_warnings:
         st.error(f"🚨 **อันตราย!** มีเสาเข็มรับแรงถอน (Tension) เกินค่าพิกัดปลอดภัยที่ตั้งไว้ ({pile_tension_cap} ตัน/ต้น): {', '.join(tension_warnings)}")
-    # ----------------------------------------------------------------------
     
     col_res1, col_res2 = st.columns(2)
     with col_res1:
@@ -600,7 +661,7 @@ with tab_report:
     with col_res2:
         st.write("**ตารางสรุปผลแรงปฏิกิริยาหัวเสาเข็มรอบทิศทาง**")
         df_react = pd.DataFrame({
-            'ชื่อเข็ม': df_initial['ชื่อเข็ม'], 
+            'ชื่อเข็ม': st.session_state.pile_data['ชื่อเข็ม'], 
             'R_u (ดิ่ง-ตัน)': p_ult_out,
             'R_s (ดิ่งใช้งาน-ตัน)': pile_service_reactions,
             'V_i (ราบแผ่นดินไหว-ตัน)': pile_horizontal_shear
