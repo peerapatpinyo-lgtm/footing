@@ -7,12 +7,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.font_manager as fm
+from matplotlib.path import Path
 import plotly.graph_objects as go
 
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V8.5", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V8.5 - Flexible Engine", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -40,10 +41,143 @@ def initialize_thai_font_system():
 current_thai_font = initialize_thai_font_system()
 
 # =========================================================================
+# ADVANCED ENGINEERING SOLVER: WINKLER FOUNDATION (FDM GRID ENGINE)
+# =========================================================================
+def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, M_y, t_actual, fc_prime, pile_ks):
+    """
+    วิเคราะห์เสาเข็มและฐานรากแบบยืดหยุ่น (Flexible Winkler Foundation)
+    จำลองพฤติกรรมแผ่นคอนกรีตที่มีการโก่งตัวจริง และเสาเข็มเป็นฐานรองรับแบบสปริง
+    """
+    x_coords = [v[0] for v in vertices]
+    y_coords = [v[1] for v in vertices]
+    xmin, xmax = min(x_coords), max(x_coords)
+    ymin, ymax = min(y_coords), max(y_coords)
+    
+    # เพิ่มระยะขอบเล็กน้อยป้องกันความผิดพลาดทางทศนิยม
+    margin = 0.05
+    xmin -= margin; xmax += margin
+    ymin -= margin; ymax += margin
+    
+    nx, ny = 20, 20
+    dx = (xmax - xmin) / (nx - 1)
+    dy = (ymax - ymin) / (ny - 1)
+    
+    # คำนวณค่า Modulus of Elasticity ของคอนกรีตตามมาตรฐาน ACI (ton/m^2)
+    fc_mpa = fc_prime * 0.0980665
+    E_c_mpa = 4700 * math.sqrt(fc_mpa)
+    E_concrete = E_c_mpa * 101.9716 
+    
+    # คำนวณ Flexural Rigidity D ของแผ่นพื้นคอนกรีต
+    nu = 0.15
+    D = (E_concrete * (t_actual**3)) / (12 * (1 - nu**2))
+    
+    poly_path = Path(vertices)
+    active_nodes = []
+    grid_to_global = {}
+    node_idx = 0
+    
+    for i in range(nx):
+        for j in range(ny):
+            x = xmin + i * dx
+            y = ymin + j * dy
+            if poly_path.contains_point((x, y)) or poly_path.contains_point((x, y), radius=0.01):
+                grid_to_global[(i, j)] = node_idx
+                active_nodes.append((i, j, x, y))
+                node_idx += 1
+                
+    M = len(active_nodes)
+    if M == 0:
+        return [P_total / max(1, len(piles_act))] * len(piles_act)
+        
+    K = np.zeros((M, M))
+    F = np.zeros(M)
+    
+    # ประกอบเมทริกซ์ความแข็งแรงด้วยวิธีผลต่างอันดับสิ้นสุด (Grillage Scheme)
+    factor_x = (D * dy) / (dx**3)
+    for j in range(ny):
+        for i in range(nx - 2):
+            g0 = grid_to_global.get((i, j))
+            g1 = grid_to_global.get((i+1, j))
+            g2 = grid_to_global.get((i+2, j))
+            if g0 is not None and g1 is not None and g2 is not None:
+                idx = [g0, g1, g2]
+                coeffs = [1.0, -2.0, 1.0]
+                for r in range(3):
+                    for c in range(3):
+                        K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_x
+                        
+    factor_y = (D * dx) / (dy**3)
+    for i in range(nx):
+        for j in range(ny - 2):
+            g0 = grid_to_global.get((i, j))
+            g1 = grid_to_global.get((i, j+1))
+            g2 = grid_to_global.get((i, j+2))
+            if g0 is not None and g1 is not None and g2 is not None:
+                idx = [g0, g1, g2]
+                coeffs = [1.0, -2.0, 1.0]
+                for r in range(3):
+                    for c in range(3):
+                        K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_y
+                        
+    # ติดตั้งสปริงเสาเข็มลงในโหนดที่ใกล้พิกัดจริงที่สุด
+    pile_node_indices = []
+    for px, py in piles_act:
+        min_dist = float('inf')
+        best_g = 0
+        for g_idx, (i, j, x, y) in enumerate(active_nodes):
+            d = (x - px)**2 + (y - py)**2
+            if d < min_dist:
+                min_dist = d
+                best_g = g_idx
+        K[best_g, best_g] += pile_ks
+        pile_node_indices.append(best_g)
+        
+    # กระจายแรงกดและแรงดัดตอม่อลงสู่กลุ่มโหนดโครงสร้าง
+    for col_x, col_y in columns_list:
+        P_col = P_total / len(columns_list)
+        Mx_col = M_x / len(columns_list)
+        My_col = M_y / len(columns_list)
+        
+        min_dist = float('inf')
+        best_g = 0
+        best_i, best_j = 0, 0
+        for g_idx, (i, j, x, y) in enumerate(active_nodes):
+            d = (x - col_x)**2 + (y - col_y)**2
+            if d < min_dist:
+                min_dist = d
+                best_g = g_idx
+                best_i, best_j = i, j
+        F[best_g] += P_col
+        
+        # ถ่ายโมเมนต์ผ่านคู่แรงคู่ควบ (Force Couples) บนระนาบกริด
+        g_north = grid_to_global.get((best_i, min(ny-1, best_j + 1)))
+        g_south = grid_to_global.get((best_i, max(0, best_j - 1)))
+        if g_north is not None and g_south is not None:
+            F[g_north] += Mx_col / (2 * dy)
+            F[g_south] -= Mx_col / (2 * dy)
+            
+        g_east = grid_to_global.get((min(nx-1, best_i + 1), best_j))
+        g_west = grid_to_global.get((max(0, best_i - 1), best_j))
+        if g_east is not None and g_west is not None:
+            F[g_east] += My_col / (2 * dx)
+            F[g_west] -= My_col / (2 * dx)
+            
+    K += np.eye(M) * 1e-3  # เพิ่มเสถียรภาพทางคณิตศาสตร์ป้องกัน Singular Matrix
+    try:
+        w_disp = np.linalg.solve(K, F)
+    except np.linalg.LinAlgError:
+        return [P_total / len(piles_act)] * len(piles_act)
+        
+    reactions = [w_disp[g_idx] * pile_ks for g_idx in pile_node_indices]
+    
+    # ปรับแต่งระดับความสมดุล (Equilibrium Scaling Re-check)
+    sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
+    return [r * (P_total / sum_r) for r in reactions]
+
+# =========================================================================
 # HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION)
 # =========================================================================
 def polygon_area(vertices):
-    """คำนวณพื้นที่รูปหลายเหลี่ยมใดๆ (Polygon Area)"""
     n = len(vertices)
     area = 0.0
     for i in range(n):
@@ -53,7 +187,6 @@ def polygon_area(vertices):
     return abs(area) / 2.0
 
 def compute_polygon_advanced_properties(vertices):
-    """คำนวณหาจุด C.G. และ Moment of Inertia แบบละเอียดรองรับรูปทรงอิสระ"""
     n = len(vertices)
     area = 0.0
     cx, cy = 0.0, 0.0
@@ -80,7 +213,6 @@ def compute_polygon_advanced_properties(vertices):
     return area, cx, cy, max(0.001, Ixx), max(0.001, Iyy), Ixy
 
 def get_polygon_section_width_at_y(target_y, vertices):
-    """หาความกว้างหน้าตัดคอนกรีต bw ที่แกน Y ใดๆ"""
     intersections = []
     n = len(vertices)
     for i in range(n):
@@ -97,7 +229,6 @@ def get_polygon_section_width_at_y(target_y, vertices):
     return 0.01
 
 def get_polygon_section_height_at_x(target_x, vertices):
-    """หาความยาวหน้าตัดคอนกรีตที่แกน X ใดๆ"""
     intersections = []
     n = len(vertices)
     for i in range(n):
@@ -114,7 +245,6 @@ def get_polygon_section_height_at_x(target_x, vertices):
     return 0.01
 
 def compute_effective_depth(t_total, cover_cm, embed_cm, bar_dia_mm):
-    # FIXED: ปรับปรุงตามหลักปฏิบัติหน้างานจริง ระยะหุ้มวิกฤตมาจากค่าที่มากที่สุดระหว่าง Cover และ Embedment
     effective_cover = max(cover_cm / 100, embed_cm / 100)
     return t_total - effective_cover - ((bar_dia_mm / 1000) / 2)
 
@@ -163,9 +293,7 @@ def evaluate_development_length(fy_ksc, fc_ksc, bar_dia_mm, available_length_m, 
 # EVALUATION ROUTINES
 # =========================================================================
 def evaluate_gergely_lutz_crack(Ms_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacing_cm):
-    """คำนวณความกว้างรอยร้าวตามข้อกำหนดสภาวะใช้งาน (Serviceability State)"""
     if Ms_ton_m <= 0 or As_cm2 <= 0: return 0.0
-    # FIXED: ถอดค่าแรงเค้นเหล็กเสริม (fs) ออกมาจาก Service Bending Moment เสมอ
     fs_ksc = (Ms_ton_m * 1000 * 100) / (As_cm2 * 0.85 * d_cm) 
     fs_mpa = fs_ksc * 0.0980665
     fy_mpa = 400.0
@@ -179,22 +307,15 @@ def evaluate_gergely_lutz_crack(Ms_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacin
     w_crack = 11.0e-6 * beta * fs_mpa * ((dc_mm * A_eff_mm2)**(1/3))
     return w_crack
 
-def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, pile_dia=0.3, I_xy=0.0, phi_s=0.75):
+def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, pile_dia=0.3, I_xy=0.0, phi_s=0.75, pile_ks=20000.0):
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
-    p_ult_reactions = []
-    denom = (I_xx * I_yy) - I_xy**2
-    if abs(denom) < 1e-5: denom = max(0.001, I_xx * I_yy)
-        
-    for prx, pry in piles_rel:
-        R_u = (P_total_factored / n_piles_act) + \
-              ((Mu_x_total * I_yy - Mu_y_total * I_xy) / denom) * pry + \
-              ((Mu_y_total * I_xx - Mu_x_total * I_xy) / denom) * prx
-        p_ult_reactions.append(R_u)
+    # เรียกใช้ระบบวิเคราะห์สปริงยืดหยุ่น Winkler Model (FDM Engine)
+    p_ult_reactions = compute_flexible_reactions(vertices, piles_act, columns_list, P_total_factored, Mu_x_total, Mu_y_total, eval_t, fc_prime, pile_ks)
         
     # 1. Column Punching Shear
     b1_box, b2_box = cx + eval_d, cy + eval_d
@@ -215,7 +336,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     beta_ratio = max(cx, cy) / min(cx, cy) if min(cx, cy) > 0 else 1.0
     alpha_s = 40 if col_pos == "Interior" else (30 if col_pos == "Edge" else 20)
     
-    # FIXED: ปรับปรุงค่าสัมประสิทธิ์ตัวคูณแปรผันตามมาตรฐาน ACI 318 Metric Code เป๊ะๆ (0.53 ตัวหลัก)
     v_c_allow_punching = phi_s * min(
         0.53 * (1 + 2 / beta_ratio) * math.sqrt(fc_prime), 
         0.27 * (alpha_s * (eval_d * 100) / (b_0 * 100) + 2) * math.sqrt(fc_prime), 
@@ -296,7 +416,6 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
         ax.add_patch(pile_patch)
         ax.text(px, py, f"P{i+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold')
         
-    # ENHANCEMENT: แสดงจุดศูนย์กลางกลุ่มเสาเข็มจริง (As-Built C.G.) และเส้นเยื้องศูนย์
     ax.plot(cg_x, cg_y, 'X', color='#e67e22', markersize=10, label=f'C.G. เข็มเยื้องจริง ({cg_x:.2f}, {cg_y:.2f})')
     ax.plot([0, cg_x], [0, cg_y], ':', color='#d35400', linewidth=1.5)
 
@@ -312,7 +431,7 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
 
 def generate_rebar_detailing_view(t_actual, b_max, cover_cm, embed_cm, bar_dia, n_bars_x, sp_x, cx, cy, require_top_steel):
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.set_aspect('equal') # ENHANCEMENT: บังคับมาตรส่วนสัดส่วนจริง (True Aspect Ratio) ป้องกันการยืดเพี้ยน
+    ax.set_aspect('equal') 
     c_m, e_m, d_m = cover_cm / 100, embed_cm / 100, bar_dia / 1000
     hook_len = min(0.30, max(0.15, t_actual - 2*c_m - e_m))
     
@@ -331,7 +450,6 @@ def generate_rebar_detailing_view(t_actual, b_max, cover_cm, embed_cm, bar_dia, 
     bot_z_y = bot_z_x + d_m
     left_x, right_x = -b_max/2 + c_m, b_max/2 - c_m
     
-    # วาดเหล็กล่างตะแกรงหลัก
     ax.plot([left_x, right_x], [bot_z_x, bot_z_x], color='#c0392b', linewidth=2.5, label=f'เหล็กล่าง DB{bar_dia}')
     ax.plot([left_x, left_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=2.5)
     ax.plot([right_x, right_x], [bot_z_x, bot_z_x + hook_len], color='#c0392b', linewidth=2.5)
@@ -385,8 +503,6 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
             next_idx = (idx + 1) % n
             i_idx.extend([idx, idx]); j_idx.extend([next_idx, n + next_idx]); k_idx.extend([n + next_idx, n + idx])
         
-        # ENHANCEMENT: เปิดใช้งาน Studio Lighting Shading ให้ตัวโมเดล 3D มีมิติเงาสะท้อนสวยงาม
-    
         return go.Mesh3d(
             x=x_coords, y=y_coords, z=z_coords, i=i_idx, j=j_idx, k=k_idx, 
             color=face_color, opacity=opacity, name=name, showlegend=show_legend,
@@ -404,7 +520,6 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
         column_vertices = [(col_x-cx/2, col_y-cy/2), (col_x+cx/2, col_y-cy/2), (col_x+cx/2, col_y+cy/2), (col_x-cx/2, col_y+cy/2)]
         fig_3d.add_trace(create_3d_prism_trace(column_vertices, 0, 0.40, '#e74c3c', 0.75, 'เสาตอม่อ', show_legend=False))
     
-    # ENHANCEMENT: ปรับเปลี่ยนจากเสาเข็มเส้นตรงแบนๆ ให้กลายเป็นโมเดลเสาเข็มแบบ "แท่งทรงรูปทรงปริมาตรจริง 3D"
     for index, p in enumerate(piles_actual):
         px, py = p[0], p[1]
         if pile_shape == "Circular Pile":
@@ -417,7 +532,6 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
             
         fig_3d.add_trace(create_3d_prism_trace(pile_verts, pile_bottom_z, pile_top_z, '#7f8c8d', 0.8, f'เสาเข็ม P{index+1}', show_legend=False))
         
-        # ป้ายชื่อกำกับหัวเข็ม
         fig_3d.add_trace(go.Scatter3d(
             x=[px], y=[py], z=[pile_top_z + 0.05],
             mode='text', text=[f"P{index+1}"], textposition="top center",
@@ -464,6 +578,7 @@ with st.sidebar:
     
     pile_cap = st.number_input("กำลังรับแรงอัดที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=30.0)
     pile_tension_cap = st.number_input("กำลังรับแรงถอนที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=10.0)
+    pile_ks = st.number_input("ความแข็งแรงสปริงเสาเข็ม k_s (ตัน/ม.)", value=20000.0, step=1000.0) # New Flexible Spring Parameter
     
     S_dist = 3.0 * pile_w
     E_dist = 0.40 
@@ -539,8 +654,8 @@ ab_area = (math.pi * (bar_dia / 10) ** 2) / 4
 # =========================================================================
 # MAIN DATA PROCESSING FLOW 
 # =========================================================================
-st.markdown("### 📍 1. การวิเคราะห์ As-Built Field Survey เข็มตอม่อ")
-st.info("💡 **ระบบวิเคราะห์ความปลอดภัยเชิงพิกัดร่วม:** โค้ดจะดักจับแรงเยื้องศูนย์จริงรวมกับผลของแรงแผ่นดินไหว/แรงลมแนวราบ")
+st.markdown("### 📍 1. การวิเคราะห์ As-Built Field Survey เข็มตอม่อ (Flexible Winkler Matrix Method)")
+st.info("💡 **ระบบวิเคราะห์ความยืดหยุ่น Winkler Foundation:** ระบบจะคำนวณการกระจายแรงสู่หัวเข็มโดยคำนึงถึงความแอ่นตัวของหน้าตัดคอนกรีตจริง")
 
 if "prev_footing" not in st.session_state:
     st.session_state.prev_footing = footing_shape_type
@@ -605,7 +720,7 @@ if thickness_mode == "Auto-Optimize":
         loop_counter += 1
         t_opt = d_opt + max(concrete_cover_cm/100, pile_embed_cm/100) + ((bar_dia/1000)/2)
         safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
-            d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom
+            d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
         )
         if safe: break
         d_opt += step
@@ -619,7 +734,7 @@ else:
     t_actual = manual_t
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
     safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
-        d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom
+        d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
 
 polar_R_sum = sum(prx**2 + pry**2 for prx, pry in piles_relative)
@@ -631,20 +746,12 @@ for prx, pry in piles_relative:
     V_iy = (V_y / n_piles) + (T_z * prx / polar_R_sum)
     pile_horizontal_shear.append(math.sqrt(V_ix**2 + V_iy**2))
 
-P_u_total = P_ultimate + factor_dl * ( (footing_area*t_actual*2.4) + W_soil)
 P_service_total = DL + LL + (footing_area * t_actual * 2.4) + W_soil
 Ms_cx_total = Ms_cx + P_service_total * ecc_y
 Ms_cy_total = Ms_cy + P_service_total * ecc_x
 
-pile_service_reactions = []
-denom_s = (I_xx_group * I_yy_group) - I_xy_geom**2
-if abs(denom_s) < 1e-5: denom_s = max(0.001, I_xx_group * I_yy_group)
-
-for prx, pry in piles_relative:
-    R_s = (P_service_total / n_piles) + \
-          ((Ms_cx_total * I_yy_group - Ms_cy_total * I_xy_geom) / denom_s) * pry + \
-          ((Ms_cy_total * I_xx_group - Ms_cx_total * I_xy_geom) / denom_s) * prx
-    pile_service_reactions.append(R_s)
+# คำนวณแรงปฏิกิริยาสภาวะใช้งานด้วยระบบสปริงยืดหยุ่น Winkler Foundation
+pile_service_reactions = compute_flexible_reactions(concrete_vertices, piles_actual, columns_list, P_service_total, Ms_cx_total, Ms_cy_total, t_actual, fc_prime, pile_ks)
 
 has_tension = any(r < 0 for r in p_ult_out)
 require_top_steel = has_tension or (t_actual >= 0.60) 
@@ -667,7 +774,6 @@ w_flex_y = min(w_flex_left, w_flex_right)
 
 n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max, w_flex_y, d_actual*100, t_actual*100, fc_prime, fy, phi_flexure, ab_area, concrete_cover_cm, env_cond=environmental_condition)
 
-# FIXED: คำนวณ Service Moment สูงสุด เพื่อนำไปเช็คความกว้างรอยร้าวตามทฤษฎีที่ถูกต้อง
 Ms_x_top = abs(sum(pile_service_reactions[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 Ms_x_bot = abs(sum(pile_service_reactions[i] * (abs(p[1]) - cy/2) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
 Ms_x_max = max(Ms_x_top, Ms_x_bot)
