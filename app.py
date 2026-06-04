@@ -347,6 +347,7 @@ def evaluate_gergely_lutz_crack(Ms_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacin
     w_crack = 11.0e-6 * beta * fs_mpa * ((dc_mm * A_eff_mm2)**(1/3))
     return w_crack
 
+
 def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, pile_dia=0.3, I_xy=0.0, phi_s=0.75, pile_ks=20000.0):
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
@@ -354,12 +355,15 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
-    p_ult_reactions = compute_flexible_reactions(vertices, piles_act, columns_list, P_total_factored, Mu_x_total, Mu_y_total, eval_t, fc_prime, pile_ks)
+    # [แก้ไข]: รับค่าคืนกลับจาก Flexible FDM (ดึงเฉพาะ Index [0] ที่เป็นแรงปฏิกิริยาเข็มมาเช็ค Shear)
+    p_ult_reactions, _, _ = compute_flexible_reactions(vertices, piles_act, columns_list, P_total_factored, Mu_x_total, Mu_y_total, eval_t, fc_prime, pile_ks)
         
-    # 1. Column Punching Shear
+    # =========================================================================
+    # 1. Column Punching Shear (แรงเฉือนทะลุรอบตอม่อ)
+    # =========================================================================
     b1_box, b2_box = cx + eval_d, cy + eval_d
-    b_0 = 2 * (b1_box + b2_box)
-    A_punching_cm2 = b_0 * eval_d * 10000
+    b_0_col = 2 * (b1_box + b2_box)
+    A_punching_col_cm2 = b_0_col * eval_d * 10000
     
     V_u_punching_kg = 0.0
     for idx, (px, py) in enumerate(piles_act):
@@ -371,18 +375,24 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
         if is_outside:
             V_u_punching_kg += max(0.0, p_ult_reactions[idx] * 1000)
 
-    v_u_punching_stress = V_u_punching_kg / A_punching_cm2 if A_punching_cm2 > 0 else 0.0
+    v_u_col_punching_stress = V_u_punching_kg / A_punching_col_cm2 if A_punching_col_cm2 > 0 else 0.0
     beta_ratio = max(cx, cy) / min(cx, cy) if min(cx, cy) > 0 else 1.0
     alpha_s = 40 if col_pos == "Interior" else (30 if col_pos == "Edge" else 20)
     
-    v_c_allow_punching = phi_s * min(
+    v_c_allow_col_punching = phi_s * min(
         0.53 * (1 + 2 / beta_ratio) * math.sqrt(fc_prime), 
-        0.27 * (alpha_s * (eval_d * 100) / (b_0 * 100) + 2) * math.sqrt(fc_prime), 
+        0.27 * (alpha_s * (eval_d * 100) / (b_0_col * 100) + 2) * math.sqrt(fc_prime), 
         1.06 * math.sqrt(fc_prime)
     )
+    is_col_punch_safe = (v_u_col_punching_stress <= v_c_allow_col_punching)
     
-    # 2. Pile Punching Shear
+    # =========================================================================
+    # 2. Pile Punching Shear (แรงเฉือนทะลุจากหัวเสาเข็มเดี่ยว)
+    # =========================================================================
     v_u_pile_punching_max = 0.0
+    # เสาเข็มเดี่ยวเปรียบเสมือนเสากลางสมมาตรเสมอ (Interior Column) จึงใช้ค่าขีดจำกัดที่ 1.06 ได้เลย
+    v_c_allow_pile_punching = phi_s * 1.06 * math.sqrt(fc_prime)
+    
     for idx, (px, py) in enumerate(piles_act):
         if p_ult_reactions[idx] > 0:
             b0_pile = calculate_b0_reduced_for_pile(px, py, pile_dia, eval_d, vertices)
@@ -391,9 +401,11 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
                 stress = (p_ult_reactions[idx] * 1000) / A_punch_pile_cm2
                 v_u_pile_punching_max = max(v_u_pile_punching_max, stress)
 
-    v_u_punching_stress = max(v_u_punching_stress, v_u_pile_punching_max)
+    is_pile_punch_safe = (v_u_pile_punching_max <= v_c_allow_pile_punching)
 
-    # 3. Wide-Beam Shear
+    # =========================================================================
+    # 3. Wide-Beam Shear (แรงเฉือนคานกว้าง)
+    # =========================================================================
     cut_y_top = cy/2 + eval_d
     V_u_wb_top = sum(max(0.0, p_ult_reactions[idx] * 1000) for idx, (px, py) in enumerate(piles_act) if py >= cut_y_top)
     bw_top = get_polygon_section_width_at_y(cut_y_top, vertices) * 100
@@ -407,8 +419,11 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     v_u_wb_max = max(v_u_wb_top_stress, v_u_wb_bot_stress)
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
     
-    is_safe = (v_u_punching_stress <= v_c_allow_punching) and (v_u_wb_max <= v_c_allow_wb)
-    return is_safe, v_u_punching_stress, v_c_allow_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions
+    # Check ความปลอดภัยรวมจากทั้ง 3 กลไก
+    is_safe = is_col_punch_safe and is_pile_punch_safe and (v_u_wb_max <= v_c_allow_wb)
+    
+    # [แก้ไข]: Return ค่าแรงเฉือนของตอม่อและเสาเข็มแยกออกจากกัน
+    return is_safe, v_u_col_punching_stress, v_c_allow_col_punching, v_u_pile_punching_max, v_c_allow_pile_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions
 
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
     width_cm = max(width_cm, 30.0)
