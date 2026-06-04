@@ -386,10 +386,11 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
             i_idx.extend([idx, idx]); j_idx.extend([next_idx, n + next_idx]); k_idx.extend([n + next_idx, n + idx])
         
         # ENHANCEMENT: เปิดใช้งาน Studio Lighting Shading ให้ตัวโมเดล 3D มีมิติเงาสะท้อนสวยงาม
+    
         return go.Mesh3d(
             x=x_coords, y=y_coords, z=z_coords, i=i_idx, j=j_idx, k=k_idx, 
             color=face_color, opacity=opacity, name=name, showlegend=show_legend,
-            lighting=dict(ambient=0.6, diffuse=0.8, roughness=0.4, specular=0.3, freshnel=0.2)
+            lighting=dict(ambient=0.6, diffuse=0.8, roughness=0.4, specular=0.3, fresnel=0.2)
         )
 
     fig_3d = go.Figure()
