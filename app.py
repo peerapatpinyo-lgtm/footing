@@ -85,66 +85,79 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     factor_nu = (D * nu) / (dx * dy)
     factor_twist = (D * (1.0 - nu)) / (dx * dy)
     
+    # ---------------------------------------------------------
+    # [OPTIMIZATION] สร้าง Base Stiffness Matrix (K_base) และ Load (F_base) นอกลูป
+    # ---------------------------------------------------------
+    K_base = np.zeros((M, M))
+    F_base = np.zeros(M)
+    
+    for j in range(ny):
+        for i in range(1, nx - 1):
+            g0, g1, g2 = grid_to_global.get((i-1, j)), grid_to_global.get((i, j)), grid_to_global.get((i+1, j))
+            if all(g is not None for g in [g0, g1, g2]):
+                for r, c in [(r,c) for r in range(3) for c in range(3)]:
+                    K_base[[g0,g1,g2][r], [g0,g1,g2][c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_x
+                    
+    for i in range(nx):
+        for j in range(1, ny - 1):
+            g0, g1, g2 = grid_to_global.get((i, j-1)), grid_to_global.get((i, j)), grid_to_global.get((i, j+1))
+            if all(g is not None for g in [g0, g1, g2]):
+                for r, c in [(r,c) for r in range(3) for c in range(3)]:
+                    K_base[[g0,g1,g2][r], [g0,g1,g2][c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_y
+
+    for i in range(1, nx - 1):
+        for j in range(1, ny - 1):
+            g_mid, g_e, g_w, g_n, g_s = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i-1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i, j-1))
+            if all(g is not None for g in [g_mid, g_e, g_w, g_n, g_s]):
+                idx_x, idx_y = [g_w, g_mid, g_e], [g_s, g_mid, g_n]
+                for r, c in [(r,c) for r in range(3) for c in range(3)]:
+                    K_base[idx_x[r], idx_y[c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_nu
+
+    for i in range(nx - 1):
+        for j in range(ny - 1):
+            g00, g10, g01, g11 = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i+1, j+1))
+            if all(g is not None for g in [g00, g10, g01, g11]):
+                idx = [g00, g10, g01, g11]
+                for r, c in [(r,c) for r in range(4) for c in range(4)]:
+                    K_base[idx[r], idx[c]] += [1.0, -1.0, -1.0, 1.0][r] * [1.0, -1.0, -1.0, 1.0][c] * factor_twist
+    
+    K_base += np.eye(M) * 1e-3
+    
+    pile_node_indices = []
+    for px, py in piles_act:
+        best_g = min(active_nodes, key=lambda n: (n[2]-px)**2 + (n[3]-py)**2)[0]
+        pile_node_indices.append(best_g)
+
+    for col_x, col_y in columns_list:
+        best_i, best_j, _, _ = min(active_nodes, key=lambda n: (n[2]-col_x)**2 + (n[3]-col_y)**2)
+        best_g = grid_to_global[(best_i, best_j)]
+        F_base[best_g] += P_total / len(columns_list)
+        
+        g_n, g_s = grid_to_global.get((best_i, min(ny-1, best_j+1))), grid_to_global.get((best_i, max(0, best_j-1)))
+        if g_n and g_s:
+            F_base[g_n] += (M_x / len(columns_list)) / (2 * dy)
+            F_base[g_s] -= (M_x / len(columns_list)) / (2 * dy)
+            
+        g_e, g_w = grid_to_global.get((min(nx-1, best_i+1), best_j)), grid_to_global.get((max(0, best_i-1), best_j))
+        if g_e and g_w:
+            F_base[g_e] += (M_y / len(columns_list)) / (2 * dx)
+            F_base[g_w] -= (M_y / len(columns_list)) / (2 * dx)
+
+    # ---------------------------------------------------------
+    # Iterative Solver
+    # ---------------------------------------------------------
     max_iter = 15
     active_piles = [True] * len(piles_act)
     w_disp = np.zeros(M)
     
     for iteration in range(max_iter):
-        K = np.zeros((M, M))
-        F = np.zeros(M)
+        K = K_base.copy()
+        F = F_base.copy()
         
-        for j in range(ny):
-            for i in range(1, nx - 1):
-                g0, g1, g2 = grid_to_global.get((i-1, j)), grid_to_global.get((i, j)), grid_to_global.get((i+1, j))
-                if all(g is not None for g in [g0, g1, g2]):
-                    for r, c in [(r,c) for r in range(3) for c in range(3)]:
-                        K[[g0,g1,g2][r], [g0,g1,g2][c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_x
-                        
-        for i in range(nx):
-            for j in range(1, ny - 1):
-                g0, g1, g2 = grid_to_global.get((i, j-1)), grid_to_global.get((i, j)), grid_to_global.get((i, j+1))
-                if all(g is not None for g in [g0, g1, g2]):
-                    for r, c in [(r,c) for r in range(3) for c in range(3)]:
-                        K[[g0,g1,g2][r], [g0,g1,g2][c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_y
-
-        for i in range(1, nx - 1):
-            for j in range(1, ny - 1):
-                g_mid, g_e, g_w, g_n, g_s = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i-1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i, j-1))
-                if all(g is not None for g in [g_mid, g_e, g_w, g_n, g_s]):
-                    idx_x, idx_y = [g_w, g_mid, g_e], [g_s, g_mid, g_n]
-                    for r, c in [(r,c) for r in range(3) for c in range(3)]:
-                        K[idx_x[r], idx_y[c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_nu
-
-        for i in range(nx - 1):
-            for j in range(ny - 1):
-                g00, g10, g01, g11 = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i+1, j+1))
-                if all(g is not None for g in [g00, g10, g01, g11]):
-                    idx = [g00, g10, g01, g11]
-                    for r, c in [(r,c) for r in range(4) for c in range(4)]:
-                        K[idx[r], idx[c]] += [1.0, -1.0, -1.0, 1.0][r] * [1.0, -1.0, -1.0, 1.0][c] * factor_twist
-        
-        pile_node_indices = []
-        for idx, (px, py) in enumerate(piles_act):
-            best_g = min(active_nodes, key=lambda n: (n[2]-px)**2 + (n[3]-py)**2)[0]
-            pile_node_indices.append(best_g)
-            if active_piles[idx]: K[best_g, best_g] += pile_ks
+        for idx, g_idx in enumerate(pile_node_indices):
+            if active_piles[idx]:
+                K[g_idx, g_idx] += pile_ks
                 
-        for col_x, col_y in columns_list:
-            best_i, best_j, _, _ = min(active_nodes, key=lambda n: (n[2]-col_x)**2 + (n[3]-col_y)**2)
-            best_g = grid_to_global[(best_i, best_j)]
-            F[best_g] += P_total / len(columns_list)
-            
-            g_n, g_s = grid_to_global.get((best_i, min(ny-1, best_j+1))), grid_to_global.get((best_i, max(0, best_j-1)))
-            if g_n and g_s:
-                F[g_n] += (M_x / len(columns_list)) / (2 * dy)
-                F[g_s] -= (M_x / len(columns_list)) / (2 * dy)
-                
-            g_e, g_w = grid_to_global.get((min(nx-1, best_i+1), best_j)), grid_to_global.get((max(0, best_i-1), best_j))
-            if g_e and g_w:
-                F[g_e] += (M_y / len(columns_list)) / (2 * dx)
-                F[g_w] -= (M_y / len(columns_list)) / (2 * dx)
-                
-        K += np.eye(M) * 1e-3
         try: w_disp = np.linalg.solve(K, F)
         except np.linalg.LinAlgError: break
             
@@ -183,10 +196,10 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                 Vx, Vy = -D * (lap_e - lap_w)/(2*dx), -D * (lap_n - lap_s)/(2*dy)
                 max_V_fdm = max(max_V_fdm, math.hypot(Vx, Vy))
 
+    # [FIXED] ตัดการปรับสมดุล (Scale Factor) แบบ Manual ทิ้งไป เพื่อรักษาความถูกต้องตามสมการ Stiffness
     reactions = [w_disp[g_idx] * pile_ks if active_piles[idx] else 0.0 for idx, g_idx in enumerate(pile_node_indices)]
-    sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
-    final_reactions = [r * (P_total / sum_r) for r in reactions]
-    return final_reactions, max_Mx_star, max_My_star, max_V_fdm
+    
+    return reactions, max_Mx_star, max_My_star, max_V_fdm
 
 # =========================================================================
 # HELPER FUNCTIONS 
