@@ -288,6 +288,7 @@ def evaluate_gergely_lutz_crack(Ms_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacin
 # =========================================================================
 # ADVANCED SHEAR & REBAR DESIGN
 # =========================================================================
+
 def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles_act, piles_rel, piles_act, I_xx, I_yy, cx, cy, fc_prime, col_pos, vertices, factor_dl, columns_list, pile_dia=0.3, I_xy=0.0, phi_s=0.75, pile_ks=20000.0, pile_tension_cap=10.0):
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
@@ -337,6 +338,7 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     
     is_safe = (v_u_col_punching_stress <= v_c_allow_col_punching) and (v_u_pile_punching_max <= v_c_allow_pile_punching) and (v_u_wb_max <= v_c_allow_wb)
     return is_safe, v_u_col_punching_stress, v_c_allow_col_punching, v_u_pile_punching_max, v_c_allow_pile_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions, Mx_star, My_star, V_fdm
+    
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
     width_cm = max(width_cm, 30.0)
     rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
