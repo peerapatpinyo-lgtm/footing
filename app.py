@@ -59,9 +59,9 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     
     fc_mpa = fc_prime * 0.0980665
     E_c_mpa = 4700 * math.sqrt(fc_mpa)
-    E_concrete = E_c_mpa * 101.9716 
+    E_concrete = E_c_mpa * 101.9716  # หน่วย kg/m²
     
-    nu = 0.15
+    nu = 0.15  # Poisson's ratio ของคอนกรีต
     D = (E_concrete * (t_actual**3)) / (12 * (1 - nu**2))
     
     poly_path = Path(vertices)
@@ -80,17 +80,19 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                 
     M = len(active_nodes)
     if M == 0:
-        return [P_total / max(1, len(piles_act))] * len(piles_act)
+        return [P_total / max(1, len(piles_act))] * len(piles_act), 0.0, 0.0
         
     K = np.zeros((M, M))
     F = np.zeros(M)
     
+    # [แก้หัวข้อ 2 & 5]: ประกอบ Matrix K ผ่านการจัดรูปจำลองพลังงานของแผ่นพื้น 2 มิติ
+    # 1. พจน์แรงดัดแกน X: (d2w/dx2)^2
     factor_x = (D * dy) / (dx**3)
     for j in range(ny):
-        for i in range(nx - 2):
-            g0 = grid_to_global.get((i, j))
-            g1 = grid_to_global.get((i+1, j))
-            g2 = grid_to_global.get((i+2, j))
+        for i in range(1, nx - 1):
+            g0 = grid_to_global.get((i-1, j))
+            g1 = grid_to_global.get((i, j))
+            g2 = grid_to_global.get((i+1, j))
             if g0 is not None and g1 is not None and g2 is not None:
                 idx = [g0, g1, g2]
                 coeffs = [1.0, -2.0, 1.0]
@@ -98,19 +100,53 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                     for c in range(3):
                         K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_x
                         
+    # 2. พจน์แรงดัดแกน Y: (d2w/dy2)^2
     factor_y = (D * dx) / (dy**3)
     for i in range(nx):
-        for j in range(ny - 2):
-            g0 = grid_to_global.get((i, j))
-            g1 = grid_to_global.get((i, j+1))
-            g2 = grid_to_global.get((i, j+2))
+        for j in range(1, ny - 1):
+            g0 = grid_to_global.get((i, j-1))
+            g1 = grid_to_global.get((i, j))
+            g2 = grid_to_global.get((i, j+1))
             if g0 is not None and g1 is not None and g2 is not None:
                 idx = [g0, g1, g2]
                 coeffs = [1.0, -2.0, 1.0]
                 for r in range(3):
                     for c in range(3):
                         K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_y
+
+    # 3. พจน์แรงบิดและ Poisson's Ratio Coupling (Cross-Derivative Terms)
+    factor_nu = (D * nu) / (dx * dy)
+    for i in range(1, nx - 1):
+        for j in range(1, ny - 1):
+            g_mid = grid_to_global.get((i, j))
+            g_e = grid_to_global.get((i+1, j))
+            g_w = grid_to_global.get((i-1, j))
+            g_n = grid_to_global.get((i, j+1))
+            g_s = grid_to_global.get((i, j-1))
+            if all(g is not None for g in [g_mid, g_e, g_w, g_n, g_s]):
+                idx_x = [g_w, g_mid, g_e]
+                idx_y = [g_s, g_mid, g_n]
+                coeffs = [1.0, -2.0, 1.0]
+                for r in range(3):
+                    for c in range(3):
+                        K[idx_x[r], idx_y[c]] += coeffs[r] * coeffs[c] * factor_nu
+
+    # 4. พจน์แรงเฉือนบิดของแผ่นพื้น: 2 * (1 - nu) * (d2w/dxdy)^2
+    factor_twist = (D * (1.0 - nu)) / (dx * dy)
+    for i in range(nx - 1):
+        for j in range(ny - 1):
+            g00 = grid_to_global.get((i, j))
+            g10 = grid_to_global.get((i+1, j))
+            g01 = grid_to_global.get((i, j+1))
+            g11 = grid_to_global.get((i+1, j+1))
+            if all(g is not None for g in [g00, g10, g01, g11]):
+                idx = [g00, g10, g01, g11]
+                coeffs = [1.0, -1.0, -1.0, 1.0]  # ดัดแปลงจากสมการอนุพันธ์ย่อยร่วมแบบมุมแผ่น
+                for r in range(4):
+                    for c in range(4):
+                        K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_twist
                         
+    # ส่วนของการใส่เสาเข็มและโหลดตอม่อ (คงรูปเดิมของคุณไว้)
     pile_node_indices = []
     for px, py in piles_act:
         min_dist = float('inf')
@@ -155,11 +191,34 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     try:
         w_disp = np.linalg.solve(K, F)
     except np.linalg.LinAlgError:
-        return [P_total / len(piles_act)] * len(piles_act)
+        return [P_total / len(piles_act)] * len(piles_act), 0.0, 0.0
         
+    # [แก้หัวข้อ 1]: Extract หาค่าโมเมนต์สูงสุดเชิงวิชาการจากข้อมููลพิกัดการโก่ง (Curvature)
+    max_Mx_fdm = 0.0
+    max_My_fdm = 0.0
+    for g_idx, (i, j, x, y) in enumerate(active_nodes):
+        g_mid = grid_to_global.get((i, j))
+        g_e = grid_to_global.get((i+1, j))
+        g_w = grid_to_global.get((i-1, j))
+        g_n = grid_to_global.get((i, j+1))
+        g_s = grid_to_global.get((i, j-1))
+        if all(g is not None for g in [g_mid, g_e, g_w, g_n, g_s]):
+            d2w_dx2 = (w_disp[g_e] - 2 * w_disp[g_mid] + w_disp[g_w]) / (dx**2)
+            d2w_dy2 = (w_disp[g_n] - 2 * w_disp[g_mid] + w_disp[g_s]) / (dy**2)
+            
+            # สมการแผ่นพื้น Kirchhoff-Love Plate Theory (หน่วย kg-m/m width)
+            Mx_node = abs(-D * (d2w_dx2 + nu * d2w_dy2))
+            My_node = abs(-D * (d2w_dy2 + nu * d2w_dx2))
+            
+            # แปลงเป็นหน่วย Ton-m/m width เพื่อนำไปใช้คำนวณเหล็กเสริม
+            max_Mx_fdm = max(max_Mx_fdm, Mx_node / 1000.0)
+            max_My_fdm = max(max_My_fdm, My_node / 1000.0)
+
     reactions = [w_disp[g_idx] * pile_ks for g_idx in pile_node_indices]
     sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
-    return [r * (P_total / sum_r) for r in reactions]
+    final_reactions = [r * (P_total / sum_r) for r in reactions]
+    
+    return final_reactions, max_Mx_fdm, max_My_fdm
 
 # =========================================================================
 # HELPER FUNCTIONS (MATH, GEOMETRY & VISUALIZATION)
@@ -353,7 +412,11 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
 
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
     width_cm = max(width_cm, 30.0)
-    As_min = 0.0018 * width_cm * t_cm
+    
+    # [แก้หัวข้อ 3]: เปลี่ยนมาใช้สูตรเหล็กเสริมขั้นต่ำสำหรับชิ้นส่วนรับแรงดัด (Flexural Member) ในงานฐานราก
+    rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
+    As_min = rho_min * width_cm * d_cm
+    
     cover_deduction = cover_cm * 2 
     s_max = get_dynamic_s_max(t_cm / 100, env_cond)
 
