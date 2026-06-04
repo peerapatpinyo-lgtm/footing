@@ -637,68 +637,99 @@ with tab_report:
         st.dataframe(df_react.style.highlight_max(subset=['V_i (ราบแผ่นดินไหว-ตัน)'], color='#f5b041'), hide_index=True, use_container_width=True)
 
 with tab_calc:
-    st.markdown("## 📄 รายงานการคำนวณออกแบบฐานราก (Calculation Report)")
+    st.markdown("## 📄 รายงานการคำนวณออกแบบฐานรากอย่างละเอียด (Detailed Calculation Report)")
     st.markdown("**วิธีการวิเคราะห์:** Advanced Flexible Plate (FDM Energy Formulation) + Wood-Armer Equations")
-    st.markdown("**อ้างอิงมาตรฐาน:** ACI 318-19 / วสท.")
+    st.markdown("**อ้างอิงมาตรฐาน:** ACI 318-19 / วสท. (รูปแบบ Strength Design Method)")
     st.divider()
 
-    st.markdown("### 📌 ส่วนที่ 1: ข้อมูลพารามิเตอร์ (Design Parameters)")
+    # คำนวณตัวแปรเสริมเพื่อใช้แสดงผลใน Report
+    beta_ratio = max(cx, cy) / min(cx, cy) if min(cx, cy) > 0 else 1.0
+    alpha_s = 40 if col_position == "Interior" else (30 if col_position == "Edge" else 20)
+    b0_col = 2 * ((cx + d_actual) + (cy + d_actual))
+    
+    st.markdown("### 📌 ส่วนที่ 1: ข้อมูลพารามิเตอร์และการหาความลึกประสิทธิผล (Effective Depth)")
     st.markdown(f"""
-    - **กำลังอัดคอนกรีต ($f'_c$):** {fc_prime} ksc
-    - **กำลังครากเหล็กเสริม ($f_y$):** {fy} ksc
+    - **กำลังอัดคอนกรีต ($f'_c$):** {fc_prime} ksc, **กำลังครากเหล็กเสริม ($f_y$):** {fy} ksc
     - **ขนาดตอม่อ ($c_x \\times c_y$):** {cx} m $\\times$ {cy} m
-    - **ความหนาฐานราก ($t$):** {t_actual:.2f} m
-    - **ความลึกประสิทธิผล ($d$):** {d_actual:.3f} m (หักระยะหุ้ม {concrete_cover_cm} cm และระยะฝัง {pile_embed_cm} cm)
-    - **เหล็กเสริมหลัก:** DB{bar_dia} (พื้นที่ {ab_area:.2f} $\\text{{cm}}^2$)
+    - **เหล็กเสริมหลัก:** DB{bar_dia} (พื้นที่ $A_b = {ab_area:.2f}$ $\\text{{cm}}^2$)
     - **ความแข็งสปริงเสาเข็ม ($k_s$):** {pile_ks:,.2f} Ton/m
     """)
+    st.latex(rf"d = t - \text{{cover}} - \frac{{d_b}}{{2}} = {t_actual:.3f} - {concrete_cover_cm/100:.3f} - \frac{{{bar_dia/1000:.3f}}}{{2}} = {d_actual:.3f} \text{{ m}}")
 
-    st.markdown("### 📌 ส่วนที่ 2: น้ำหนักบรรทุกประลัย (Ultimate Loads)")
+    st.markdown("### 📌 ส่วนที่ 2: น้ำหนักบรรทุกประลัย (Factored Ultimate Loads)")
     st.latex(rf"P_{{ult}} = ({factor_dl} \times DL) + ({factor_ll} \times LL) = ({factor_dl} \times {DL}) + ({factor_ll} \times {LL}) = {P_ultimate:.2f} \text{{ Ton}}")
     st.latex(rf"W_{{footing\_u}} = \gamma_{{DL}} \times (Area \times t \times 2.4) = {factor_dl} \times ({footing_area:.2f} \times {t_actual:.2f} \times 2.4) = {w_u_footing:.2f} \text{{ Ton}}")
     st.latex(rf"W_{{soil\_u}} = \gamma_{{DL}} \times W_{{soil}} = {factor_dl} \times {W_soil:.2f} = {w_u_soil:.2f} \text{{ Ton}}")
     st.latex(rf"\Sigma P_{{total\_u}} = {P_ultimate:.2f} + {w_u_footing:.2f} + {w_u_soil:.2f} = {P_u_total:.2f} \text{{ Ton}}")
+    st.markdown("**การถ่ายโมเมนต์จากการเยื้องศูนย์ของกลุ่มเสาเข็ม ($e_x, e_y$):**")
+    st.latex(rf"e_x = {ecc_x:.3f} \text{{ m}}, \quad e_y = {ecc_y:.3f} \text{{ m}}")
+    st.latex(rf"M_{{ux\_total}} = M_{{cx\_u}} + P_{{total\_u}}(-e_y) = {Mu_cx + (P_u_total * -ecc_y):.2f} \text{{ Ton-m}}")
+    st.latex(rf"M_{{uy\_total}} = M_{{cy\_u}} + P_{{total\_u}}(-e_x) = {Mu_cy + (P_u_total * -ecc_x):.2f} \text{{ Ton-m}}")
 
     report_Ec_mpa = 4700 * math.sqrt(fc_prime * 0.0980665)
     report_Ec_ton = report_Ec_mpa * 101.9716
     report_D = (report_Ec_ton * (t_actual**3)) / (12 * (1 - 0.15**2))
     
-    st.markdown("### 📌 ส่วนที่ 3: ความแข็งเกร็งของแผ่นพื้น (Flexural Rigidity, $D$)")
-    st.latex(rf"E_c = 4700\sqrt{{f'_c \text{{ (MPa)}}}} = {report_Ec_ton:,.0f} \text{{ Ton/m}}^2")
+    st.markdown("### 📌 ส่วนที่ 3: พฤติกรรมแผ่นพื้นยืดหยุ่น (Flexural Rigidity & FDM Moments)")
+    st.latex(rf"E_c = 4700\sqrt{{f'_c \text{{ (MPa)}}}} = {report_Ec_ton:,.0f} \text{{ Ton/m}}^2 \quad (\nu = 0.15)")
     st.latex(rf"D = \frac{{E_c t^3}}{{12(1-\nu^2)}} = \frac{{{report_Ec_ton:,.0f} \times {t_actual:.2f}^3}}{{12(1 - 0.15^2)}} = {report_D:,.2f} \text{{ Ton-m}}")
+    st.markdown("**แปลงโมเมนต์ดัดและแรงบิดจาก FDM Grid สู่ Design Moments (Wood-Armer Equations):**")
+    st.latex(r"M_x^* = |M_x| + |M_{xy}|, \quad M_y^* = |M_y| + |M_{xy}|")
+    st.latex(rf"M_{{ux\_max}}^* = {Mu_x_max_fdm:.2f} \text{{ Ton-m/m}}, \quad M_{{uy\_max}}^* = {Mu_y_max_fdm:.2f} \text{{ Ton-m/m}}")
 
     st.markdown("### 📌 ส่วนที่ 4: การตรวจสอบแรงเฉือน (Shear Validation)")
-    report_b0_col = 2 * ((cx + d_actual) + (cy + d_actual))
     st.markdown("**4.1 แรงเฉือนทะลุตอม่อ (Column Punching Shear)**")
-    st.latex(rf"b_{{0\_col}} = 2((c_x + d) + (c_y + d)) = {report_b0_col:.3f} \text{{ m}}")
-    st.latex(rf"v_c = \min\left(0.53\left(1+\frac{{2}}{{\beta}}\right)\sqrt{{f'_c}}, \dots, 1.06\sqrt{{f'_c}}\right) \times \phi = {v_cp_col:.2f} \text{{ ksc}}")
+    st.latex(rf"b_{{0\_col}} = 2((c_x + d) + (c_y + d)) = 2(({cx} + {d_actual:.3f}) + ({cy} + {d_actual:.3f})) = {b0_col:.3f} \text{{ m}}")
+    
+    vc1 = 0.53 * (1 + 2/beta_ratio) * math.sqrt(fc_prime)
+    vc2 = 0.27 * (alpha_s * (d_actual*100) / (b0_col*100) + 2) * math.sqrt(fc_prime)
+    vc3 = 1.06 * math.sqrt(fc_prime)
+    
+    st.latex(rf"v_c = \min \begin{{cases}} 0.53(1+\frac{{2}}{{\beta}})\sqrt{{f'_c}} = {vc1:.2f} \\ 0.27(\frac{{\alpha_s d}}{{b_0}}+2)\sqrt{{f'_c}} = {vc2:.2f} \\ 1.06\sqrt{{f'_c}} = {vc3:.2f} \end{{cases}} \times \phi (0.75) = {v_cp_col:.2f} \text{{ ksc}}")
     st.latex(rf"v_{{u\_col}} = {v_up_col:.2f} \text{{ ksc}} \le {v_cp_col:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_up_col <= v_cp_col else 'FAIL'}}}")
 
     st.markdown("**4.2 แรงเฉือนทะลุเสาเข็ม (Pile Punching Shear)**")
-    st.latex(rf"v_{{c\_pile}} = \phi 1.06\sqrt{{f'_c}} = {v_cp_pile:.2f} \text{{ ksc}}")
+    st.latex(rf"v_{{c\_pile}} = \phi 1.06\sqrt{{f'_c}} = 0.75 \times 1.06\sqrt{{{fc_prime}}} = {v_cp_pile:.2f} \text{{ ksc}}")
     st.latex(rf"v_{{u\_pile}} = {v_up_pile:.2f} \text{{ ksc}} \le {v_cp_pile:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_up_pile <= v_cp_pile else 'FAIL'}}}")
 
-    st.markdown("**4.3 แรงเฉือนคานกว้าง (Wide-Beam Shear)**")
-    st.latex(rf"v_{{c\_wb}} = \phi 0.53\sqrt{{f'_c}} = {v_cwb:.2f} \text{{ ksc}}")
+    st.markdown("**4.3 แรงเฉือนคานกว้าง (Wide-Beam Shear ควบรวม FDM 3rd Derivative)**")
+    st.latex(rf"v_{{c\_wb}} = \phi 0.53\sqrt{{f'_c}} = 0.75 \times 0.53\sqrt{{{fc_prime}}} = {v_cwb:.2f} \text{{ ksc}}")
     st.latex(rf"v_{{u\_wb}} = \max(v_{{static}}, 0.70v_{{FDM}}) = {v_uwb:.2f} \text{{ ksc}} \le {v_cwb:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_uwb <= v_cwb else 'FAIL'}}}")
 
+    st.markdown("### 📌 ส่วนที่ 5: การออกแบบเหล็กเสริมรับแรงดัด (Flexural Reinforcement)")
     report_rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
     report_As_min = report_rho_min * 100 * (d_actual * 100)
-    
-    st.markdown("### 📌 ส่วนที่ 5: การออกแบบเหล็กเสริมรับแรงดัด (Flexural Design)")
     st.latex(rf"\rho_{{min}} = \max \left( \frac{{0.8\sqrt{{f'_c}}}}{{f_y}}, \frac{{14}}{{f_y}} \right) = \max \left( \frac{{0.8\sqrt{{{fc_prime}}}}}{{{fy}}}, \frac{{14}}{{{fy}}} \right) = {report_rho_min:.5f}")
     st.latex(rf"A_{{s,min}} = \rho_{{min}} b d = {report_rho_min:.5f} \times 100 \times {d_actual*100:.1f} = {report_As_min:.2f} \text{{ cm}}^2/\text{{m}}")
     
-    st.markdown("**แกน X (คำนวณจาก Wood-Armer $M_x^*$):**")
-    st.latex(rf"A_{{s,req(X)}} = {as_req_x:.2f} \text{{ cm}}^2/\text{{m}} \rightarrow \textbf{{ใช้ {n_bars_x}-DB{bar_dia} @ {sp_x} cm}} \text{{ (}} A_s = {ab_area * (100/sp_x):.2f} \text{{ cm}}^2/\text{{m}} \text{{)}}")
+    # คำนวณจำลองสำหรับแสดงผลแกน X
+    Mu_kg_cm_x = Mu_x_max_fdm * 1000 * 100
+    Rn_x = Mu_kg_cm_x / (phi_flexure * 100 * (d_actual*100)**2) if d_actual > 0 else 0
+    val_sqrt_x = max(1 - (2 * Rn_x) / (0.85 * fc_prime), 0)
+    rho_req_x = (0.85 * fc_prime / fy) * (1 - math.sqrt(val_sqrt_x)) if val_sqrt_x > 0 else 0
     
-    st.markdown("**แกน Y (คำนวณจาก Wood-Armer $M_y^*$):**")
+    st.markdown("**คำนวณเหล็กแกน X (พิจารณาที่ความกว้าง $b=1.0$ m):**")
+    st.latex(rf"R_{{nx}} = \frac{{M_{{ux}}^*}}{{\phi b d^2}} = \frac{{{Mu_x_max_fdm:.2f} \times 10^5}}{{0.90 \times 100 \times {d_actual*100:.1f}^2}} = {Rn_x:.2f} \text{{ ksc}}")
+    st.latex(rf"\rho_{{req,x}} = \frac{{0.85 f'_c}}{{f_y}} \left( 1 - \sqrt{{1 - \frac{{2 R_{{nx}}}}{{0.85 f'_c}}}} \right) = \frac{{0.85({fc_prime})}}{{{fy}}} \left( 1 - \sqrt{{1 - \frac{{2({Rn_x:.2f})}}{{0.85({fc_prime})}}}} \right) = {rho_req_x:.5f}")
+    st.latex(rf"A_{{s,req(X)}} = \max(\rho_{{req,x}} b d, A_{{s,min}}) = {as_req_x:.2f} \text{{ cm}}^2/\text{{m}} \rightarrow \textbf{{ใช้ {n_bars_x}-DB{bar_dia} @ {sp_x} cm}} \text{{ (}} A_s = {ab_area * (100/sp_x):.2f} \text{{ cm}}^2/\text{{m}} \text{{)}}")
+    
+    st.markdown("**คำนวณเหล็กแกน Y:**")
     st.latex(rf"A_{{s,req(Y)}} = {as_req_y:.2f} \text{{ cm}}^2/\text{{m}} \rightarrow \textbf{{ใช้ {n_bars_y}-DB{bar_dia} @ {sp_y} cm}} \text{{ (}} A_s = {ab_area * (100/sp_y):.2f} \text{{ cm}}^2/\text{{m}} \text{{)}}")
 
-    st.markdown("### 📌 ส่วนที่ 6: การตรวจสอบรอยร้าว (Serviceability Check)")
-    st.latex(rf"w_{{crack}} = 11 \times 10^{{-6}} \beta f_s \sqrt[3]{{d_c A_{{eff}}}} = {calculated_w:.3f} \text{{ mm}}")
-    st.latex(rf"{calculated_w:.3f} \text{{ mm}} \le {w_allowable} \text{{ mm}} \rightarrow \textbf{{{'PASSED' if calculated_w <= w_allowable else 'EXCEEDED'}}}")
-
+    st.markdown("### 📌 ส่วนที่ 6: การตรวจสอบสภาวะการใช้งาน (Serviceability - Crack Width Control)")
+    st.markdown("**การคำนวณความกว้างรอยร้าวร้าวผิวคอนกรีตตามสมการ Gergely-Lutz:**")
+    
+    As_prov_x = n_bars_x * ab_area
+    fs_mpa = min((Ms_x_max_fdm * 1000 * 100) / (As_prov_x * 0.85 * (d_actual*100)) * 0.0980665, 0.6 * 400.0) if As_prov_x > 0 else 0
+    dc_mm = (concrete_cover_cm * 10.0) + (bar_dia / 2.0)
+    s_mm = sp_x * 10.0
+    A_eff = 2.0 * dc_mm * s_mm
+    
+    st.latex(rf"f_s = \frac{{M_s}}{{A_{{s,prov}} \times 0.85 \times d}} = \frac{{{Ms_x_max_fdm:.2f} \times 10^5}}{{{As_prov_x:.2f} \times 0.85 \times {d_actual*100:.1f}}} \times 0.098 = {fs_mpa:.2f} \text{{ MPa}} \quad (\le 0.6f_y)")
+    st.latex(rf"d_c = \text{{cover}} + \frac{{d_b}}{{2}} = {concrete_cover_cm*10} + \frac{{{bar_dia}}}{{2}} = {dc_mm:.1f} \text{{ mm}}")
+    st.latex(rf"A_{{eff}} = 2 d_c s = 2 \times {dc_mm:.1f} \times {s_mm:.1f} = {A_eff:,.1f} \text{{ mm}}^2")
+    st.latex(rf"w_{{crack}} = 11 \times 10^{{-6}} \beta f_s \sqrt[3]{{d_c A_{{eff}}}} = 11 \times 10^{{-6}} (1.2) ({fs_mpa:.2f}) \sqrt[3]{{{dc_mm:.1f} \times {A_eff:,.1f}}} = {calculated_w:.3f} \text{{ mm}}")
+    st.latex(rf"{calculated_w:.3f} \text{{ mm}} \le \text{{Allowable Limit (}}{w_allowable} \text{{ mm)}} \rightarrow \textbf{{{'PASSED' if calculated_w <= w_allowable else 'EXCEEDED'}}}")
 with tab_visuals:
     col_plot1, col_plot2 = st.columns(2)
     with col_plot1:
