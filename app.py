@@ -53,7 +53,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     xmin, xmax = min(x_coords), max(x_coords)
     ymin, ymax = min(y_coords), max(y_coords)
     
-    # เพิ่มระยะขอบเล็กน้อยป้องกันความผิดพลาดทางทศนิยม
     margin = 0.05
     xmin -= margin; xmax += margin
     ymin -= margin; ymax += margin
@@ -62,12 +61,10 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     dx = (xmax - xmin) / (nx - 1)
     dy = (ymax - ymin) / (ny - 1)
     
-    # คำนวณค่า Modulus of Elasticity ของคอนกรีตตามมาตรฐาน ACI (ton/m^2)
     fc_mpa = fc_prime * 0.0980665
     E_c_mpa = 4700 * math.sqrt(fc_mpa)
     E_concrete = E_c_mpa * 101.9716 
     
-    # คำนวณ Flexural Rigidity D ของแผ่นพื้นคอนกรีต
     nu = 0.15
     D = (E_concrete * (t_actual**3)) / (12 * (1 - nu**2))
     
@@ -92,7 +89,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     K = np.zeros((M, M))
     F = np.zeros(M)
     
-    # ประกอบเมทริกซ์ความแข็งแรงด้วยวิธีผลต่างอันดับสิ้นสุด (Grillage Scheme)
     factor_x = (D * dy) / (dx**3)
     for j in range(ny):
         for i in range(nx - 2):
@@ -119,7 +115,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                     for c in range(3):
                         K[idx[r], idx[c]] += coeffs[r] * coeffs[c] * factor_y
                         
-    # ติดตั้งสปริงเสาเข็มลงในโหนดที่ใกล้พิกัดจริงที่สุด
     pile_node_indices = []
     for px, py in piles_act:
         min_dist = float('inf')
@@ -132,7 +127,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
         K[best_g, best_g] += pile_ks
         pile_node_indices.append(best_g)
         
-    # กระจายแรงกดและแรงดัดตอม่อลงสู่กลุ่มโหนดโครงสร้าง
     for col_x, col_y in columns_list:
         P_col = P_total / len(columns_list)
         Mx_col = M_x / len(columns_list)
@@ -149,7 +143,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                 best_i, best_j = i, j
         F[best_g] += P_col
         
-        # ถ่ายโมเมนต์ผ่านคู่แรงคู่ควบ (Force Couples) บนระนาบกริด
         g_north = grid_to_global.get((best_i, min(ny-1, best_j + 1)))
         g_south = grid_to_global.get((best_i, max(0, best_j - 1)))
         if g_north is not None and g_south is not None:
@@ -162,7 +155,7 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
             F[g_east] += My_col / (2 * dx)
             F[g_west] -= My_col / (2 * dx)
             
-    K += np.eye(M) * 1e-3  # เพิ่มเสถียรภาพทางคณิตศาสตร์ป้องกัน Singular Matrix
+    K += np.eye(M) * 1e-3  
     try:
         w_disp = np.linalg.solve(K, F)
     except np.linalg.LinAlgError:
@@ -170,7 +163,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
         
     reactions = [w_disp[g_idx] * pile_ks for g_idx in pile_node_indices]
     
-    # ปรับแต่งระดับความสมดุล (Equilibrium Scaling Re-check)
     sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
     return [r * (P_total / sum_r) for r in reactions]
 
@@ -314,7 +306,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
     Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
     
-    # เรียกใช้ระบบวิเคราะห์สปริงยืดหยุ่น Winkler Model (FDM Engine)
     p_ult_reactions = compute_flexible_reactions(vertices, piles_act, columns_list, P_total_factored, Mu_x_total, Mu_y_total, eval_t, fc_prime, pile_ks)
         
     # 1. Column Punching Shear
@@ -578,7 +569,7 @@ with st.sidebar:
     
     pile_cap = st.number_input("กำลังรับแรงอัดที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=30.0)
     pile_tension_cap = st.number_input("กำลังรับแรงถอนที่ปลอดภัยของเข็ม (ตัน/ต้น)", value=10.0)
-    pile_ks = st.number_input("ความแข็งแรงสปริงเสาเข็ม k_s (ตัน/ม.)", value=20000.0, step=1000.0) # New Flexible Spring Parameter
+    pile_ks = st.number_input("ความแข็งแรงสปริงเสาเข็ม k_s (ตัน/ม.)", value=20000.0, step=1000.0)
     
     S_dist = 3.0 * pile_w
     E_dist = 0.40 
@@ -730,12 +721,21 @@ if thickness_mode == "Auto-Optimize":
         st.stop() 
         
     t_actual = math.ceil(t_opt * 20) / 20; d_actual = d_opt
+    # [FIXED] รันซ้ำอีกครั้งด้วยความหนาที่ทำการปัดเศษจริง เพื่อให้แรงเฉือนและปฏิกิริยาสอดคล้องถูกต้อง
+    safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
+        d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
+    )
 else:
     t_actual = manual_t
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
     safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
+
+# [FIXED] ประกาศตัวแปร P_u_total ใน Global Scope เพื่อป้องกันข้อผิดพลาด NameError ใน Report Tab
+w_u_footing_weight = factor_dl * (footing_area * t_actual * 2.4)
+w_u_soil_weight = factor_dl * W_soil
+P_u_total = P_ultimate + w_u_footing_weight + w_u_soil_weight
 
 polar_R_sum = sum(prx**2 + pry**2 for prx, pry in piles_relative)
 if polar_R_sum == 0: polar_R_sum = 1.0
@@ -750,13 +750,11 @@ P_service_total = DL + LL + (footing_area * t_actual * 2.4) + W_soil
 Ms_cx_total = Ms_cx + P_service_total * ecc_y
 Ms_cy_total = Ms_cy + P_service_total * ecc_x
 
-# คำนวณแรงปฏิกิริยาสภาวะใช้งานด้วยระบบสปริงยืดหยุ่น Winkler Foundation
 pile_service_reactions = compute_flexible_reactions(concrete_vertices, piles_actual, columns_list, P_service_total, Ms_cx_total, Ms_cy_total, t_actual, fc_prime, pile_ks)
 
 has_tension = any(r < 0 for r in p_ult_out)
 require_top_steel = has_tension or (t_actual >= 0.60) 
 
-# Ultimate Moments for Strength Design
 Mu_x_top = abs(sum(p_ult_out[i] * (p[1] - cy/2) for i, p in enumerate(piles_actual) if p[1] > cy/2))
 Mu_x_bot = abs(sum(p_ult_out[i] * (abs(p[1]) - cy/2) for i, p in enumerate(piles_actual) if p[1] < -cy/2))
 Mu_x_max = max(Mu_x_top, Mu_x_bot)
