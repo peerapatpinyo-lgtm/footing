@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V9.0 - Academic Engine", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V9.1 - Academic Engine", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -44,9 +44,6 @@ current_thai_font = initialize_thai_font_system()
 # ADVANCED ENGINEERING SOLVER: WINKLER FOUNDATION & WOOD-ARMER (ITERATIVE)
 # =========================================================================
 def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, M_y, t_actual, fc_prime, pile_ks, pile_tension_cap):
-    """
-    วิเคราะห์ FDM แบบวิชาการ: รวม Non-linear Lift-off, Wood-Armer Moments และ 3rd Derivative Shear
-    """
     x_coords = [v[0] for v in vertices]
     y_coords = [v[1] for v in vertices]
     xmin, xmax = min(x_coords), max(x_coords)
@@ -62,9 +59,9 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     
     fc_mpa = fc_prime * 0.0980665
     E_c_mpa = 4700 * math.sqrt(fc_mpa)
-    E_concrete = E_c_mpa * 101.9716  # kg/m²
-    nu = 0.15 # Poisson's Ratio สำหรับคอนกรีต
-    D = (E_concrete * (t_actual**3)) / (12 * (1 - nu**2)) # Flexural Rigidity
+    E_concrete = E_c_mpa * 101.9716  
+    nu = 0.15 
+    D = (E_concrete * (t_actual**3)) / (12 * (1 - nu**2)) 
     
     poly_path = Path(vertices)
     active_nodes = []
@@ -88,7 +85,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
     factor_nu = (D * nu) / (dx * dy)
     factor_twist = (D * (1.0 - nu)) / (dx * dy)
     
-    # [วิชาการ 2.4]: Iterative Solver จัดการ Non-Linear Spring (Tension Lift-off)
     max_iter = 15
     active_piles = [True] * len(piles_act)
     w_disp = np.zeros(M)
@@ -97,7 +93,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
         K = np.zeros((M, M))
         F = np.zeros(M)
         
-        # 1. แข็งแรงแผ่นพื้นดัด (Bending Matrix) - Energy Formulation (Free-Edge BCs handled)
         for j in range(ny):
             for i in range(1, nx - 1):
                 g0, g1, g2 = grid_to_global.get((i-1, j)), grid_to_global.get((i, j)), grid_to_global.get((i+1, j))
@@ -112,7 +107,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                     for r, c in [(r,c) for r in range(3) for c in range(3)]:
                         K[[g0,g1,g2][r], [g0,g1,g2][c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_y
 
-        # 2. Poisson's Cross-Derivative Coupling
         for i in range(1, nx - 1):
             for j in range(1, ny - 1):
                 g_mid, g_e, g_w, g_n, g_s = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i-1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i, j-1))
@@ -121,7 +115,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                     for r, c in [(r,c) for r in range(3) for c in range(3)]:
                         K[idx_x[r], idx_y[c]] += [1.0, -2.0, 1.0][r] * [1.0, -2.0, 1.0][c] * factor_nu
 
-        # 3. Twisting Moment Coupling
         for i in range(nx - 1):
             for j in range(ny - 1):
                 g00, g10, g01, g11 = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i+1, j+1))
@@ -130,15 +123,12 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                     for r, c in [(r,c) for r in range(4) for c in range(4)]:
                         K[idx[r], idx[c]] += [1.0, -1.0, -1.0, 1.0][r] * [1.0, -1.0, -1.0, 1.0][c] * factor_twist
         
-        # 4. สปริงเสาเข็ม (แบบปรับค่าตาม Lift-off)
         pile_node_indices = []
         for idx, (px, py) in enumerate(piles_act):
             best_g = min(active_nodes, key=lambda n: (n[2]-px)**2 + (n[3]-py)**2)[0]
             pile_node_indices.append(best_g)
-            if active_piles[idx]:
-                K[best_g, best_g] += pile_ks
+            if active_piles[idx]: K[best_g, best_g] += pile_ks
                 
-        # 5. น้ำหนักจากตอม่อ
         for col_x, col_y in columns_list:
             best_i, best_j, _, _ = min(active_nodes, key=lambda n: (n[2]-col_x)**2 + (n[3]-col_y)**2)
             best_g = grid_to_global[(best_i, best_j)]
@@ -155,22 +145,17 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
                 F[g_w] -= (M_y / len(columns_list)) / (2 * dx)
                 
         K += np.eye(M) * 1e-3
-        try:
-            w_disp = np.linalg.solve(K, F)
-        except np.linalg.LinAlgError:
-            break
+        try: w_disp = np.linalg.solve(K, F)
+        except np.linalg.LinAlgError: break
             
-        # ตรวจสอบ Tension Lift-off
         state_changed = False
         for idx, g_idx in enumerate(pile_node_indices):
             r = w_disp[g_idx] * pile_ks if active_piles[idx] else 0.0
             if r < -pile_tension_cap and active_piles[idx]:
                 active_piles[idx] = False
                 state_changed = True
-                
-        if not state_changed: break # ระบบเสถียร Converged!
+        if not state_changed: break 
 
-    # [วิชาการ 2.2 & 2.3]: ถอดค่า Wood-Armer Design Moments & 3rd Derivative Shear
     max_Mx_star, max_My_star, max_V_fdm = 0.0, 0.0, 0.0
     for g_idx, (i, j, x, y) in enumerate(active_nodes):
         g_mid, g_e, g_w, g_n, g_s = grid_to_global.get((i, j)), grid_to_global.get((i+1, j)), grid_to_global.get((i-1, j)), grid_to_global.get((i, j+1)), grid_to_global.get((i, j-1))
@@ -179,48 +164,39 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
         if all(g is not None for g in [g_mid, g_e, g_w, g_n, g_s]):
             d2w_dx2 = (w_disp[g_e] - 2*w_disp[g_mid] + w_disp[g_w]) / (dx**2)
             d2w_dy2 = (w_disp[g_n] - 2*w_disp[g_mid] + w_disp[g_s]) / (dy**2)
-            
-            Mx = -D * (d2w_dx2 + nu * d2w_dy2)
-            My = -D * (d2w_dy2 + nu * d2w_dx2)
+            Mx, My = -D * (d2w_dx2 + nu * d2w_dy2), -D * (d2w_dy2 + nu * d2w_dx2)
             
             Mxy = 0.0
             if all(g is not None for g in [g_ne, g_nw, g_se, g_sw]):
                 d2w_dxdy = (w_disp[g_ne] - w_disp[g_nw] - w_disp[g_se] + w_disp[g_sw]) / (4 * dx * dy)
                 Mxy = -D * (1 - nu) * d2w_dxdy
                 
-            # Wood-Armer Equations
-            Mx_star = abs(Mx) + abs(Mxy)
-            My_star = abs(My) + abs(Mxy)
+            Mx_star, My_star = abs(Mx) + abs(Mxy), abs(My) + abs(Mxy)
             max_Mx_star, max_My_star = max(max_Mx_star, Mx_star/1000.0), max(max_My_star, My_star/1000.0)
             
-            # FDM 3rd Derivative Shear (Approximation)
             g_ee, g_ww, g_nn, g_ss = grid_to_global.get((i+2, j)), grid_to_global.get((i-2, j)), grid_to_global.get((i, j+2)), grid_to_global.get((i, j-2))
             if all(g is not None for g in [g_ee, g_ww, g_nn, g_ss, g_ne, g_nw, g_se, g_sw]):
                 lap_e = (w_disp[g_ee] - 2*w_disp[g_e] + w_disp[g_mid])/(dx**2) + (w_disp[g_ne] - 2*w_disp[g_e] + w_disp[g_se])/(dy**2)
                 lap_w = (w_disp[g_mid] - 2*w_disp[g_w] + w_disp[g_ww])/(dx**2) + (w_disp[g_nw] - 2*w_disp[g_w] + w_disp[g_sw])/(dy**2)
                 lap_n = (w_disp[g_nw] - 2*w_disp[g_n] + w_disp[g_ne])/(dx**2) + (w_disp[g_nn] - 2*w_disp[g_n] + w_disp[g_mid])/(dy**2)
                 lap_s = (w_disp[g_sw] - 2*w_disp[g_s] + w_disp[g_se])/(dx**2) + (w_disp[g_mid] - 2*w_disp[g_s] + w_disp[g_ss])/(dy**2)
-                
                 Vx, Vy = -D * (lap_e - lap_w)/(2*dx), -D * (lap_n - lap_s)/(2*dy)
                 max_V_fdm = max(max_V_fdm, math.hypot(Vx, Vy))
 
     reactions = [w_disp[g_idx] * pile_ks if active_piles[idx] else 0.0 for idx, g_idx in enumerate(pile_node_indices)]
     sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
     final_reactions = [r * (P_total / sum_r) for r in reactions]
-    
     return final_reactions, max_Mx_star, max_My_star, max_V_fdm
 
 # =========================================================================
-# HELPER FUNCTIONS (MATH, GEOMETRY)
+# HELPER FUNCTIONS 
 # =========================================================================
 def polygon_area(vertices):
     n = len(vertices)
-    area = sum(vertices[i][0]*vertices[(i+1)%n][1] - vertices[(i+1)%n][0]*vertices[i][1] for i in range(n))
-    return abs(area) / 2.0
+    return abs(sum(vertices[i][0]*vertices[(i+1)%n][1] - vertices[(i+1)%n][0]*vertices[i][1] for i in range(n))) / 2.0
 
 def compute_polygon_advanced_properties(vertices):
-    n = len(vertices)
-    area, cx_g, cy_g, Ixx, Iyy, Ixy = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    n, area, cx_g, cy_g, Ixx, Iyy, Ixy = len(vertices), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     for i in range(n):
         j = (i + 1) % n
         factor = (vertices[i][0] * vertices[j][1]) - (vertices[j][0] * vertices[i][1])
@@ -278,13 +254,11 @@ def calculate_b0_reduced_for_pile(px, py, pile_w, eval_d, vertices):
     min_dist = min([point_to_segment_dist(px, py, vertices[i][0], vertices[i][1], vertices[(i+1)%n][0], vertices[(i+1)%n][1]) for i in range(n)])
     crit_dist = (pile_w / 2) + (eval_d / 2)
     b0_standard = 4 * (pile_w + eval_d)
-    if min_dist < crit_dist:
-        return 3 * (pile_w + eval_d) if min_dist > pile_w / 2 else 2 * (pile_w + eval_d)
+    if min_dist < crit_dist: return 3 * (pile_w + eval_d) if min_dist > pile_w / 2 else 2 * (pile_w + eval_d)
     return b0_standard
 
 def get_dynamic_s_max(t_actual_m, env_condition):
-    s_max = 45.0 if "กันน้ำ" not in env_condition and "กัดกร่อนสูง" not in env_condition else 30.0
-    return min(3 * t_actual_m * 100, s_max)
+    return min(3 * t_actual_m * 100, 45.0 if "กันน้ำ" not in env_condition and "กัดกร่อนสูง" not in env_condition else 30.0)
 
 def evaluate_development_length(fy_ksc, fc_ksc, bar_dia_mm, available_length_m, cover_cm):
     ld_cm = max((fy_ksc / (2.1 * math.sqrt(fc_ksc))) * (bar_dia_mm / 10.0), 30.0)
@@ -305,13 +279,10 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     w_u_footing_weight = factor_dl * (area * eval_t * 2.4)
     w_u_soil_weight = factor_dl * W_soil
     P_total_factored = P_ult + w_u_footing_weight + w_u_soil_weight
-    Mu_x_total = Mu_cx + (P_total_factored * (-ecc_y))
-    Mu_y_total = Mu_cy + (P_total_factored * (-ecc_x))
+    Mu_x_total, Mu_y_total = Mu_cx + (P_total_factored * (-ecc_y)), Mu_cy + (P_total_factored * (-ecc_x))
     
-    # ดึงค่า 4 ตัวแปรจาก FDM Solver (แรงเข็ม, Wood-Armer X, Wood-Armer Y, Academic FDM Shear)
     p_ult_reactions, Mx_star, My_star, V_fdm = compute_flexible_reactions(vertices, piles_act, columns_list, P_total_factored, Mu_x_total, Mu_y_total, eval_t, fc_prime, pile_ks, pile_tension_cap)
         
-    # 1. Column Punching Shear
     b_0_col = 2 * (cx + eval_d + cy + eval_d)
     A_punching_col_cm2 = b_0_col * eval_d * 10000
     V_u_punching_kg = sum(p_ult_reactions[idx] * 1000 for idx, (px, py) in enumerate(piles_act) if all(abs(px - col_x) > (cx/2 + eval_d/2) or abs(py - col_y) > (cy/2 + eval_d/2) for col_x, col_y in columns_list) and p_ult_reactions[idx] > 0)
@@ -321,7 +292,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     v_u_col_punching_stress = V_u_punching_kg / A_punching_col_cm2 if A_punching_col_cm2 > 0 else 0.0
     v_c_allow_col_punching = phi_s * min(0.53 * (1 + 2 / beta_ratio) * math.sqrt(fc_prime), 0.27 * (alpha_s * (eval_d * 100) / (b_0_col * 100) + 2) * math.sqrt(fc_prime), 1.06 * math.sqrt(fc_prime))
     
-    # 2. Pile Punching Shear
     v_u_pile_punching_max = 0.0
     v_c_allow_pile_punching = phi_s * 1.06 * math.sqrt(fc_prime)
     for idx, (px, py) in enumerate(piles_act):
@@ -329,7 +299,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
             A_punch_pile_cm2 = calculate_b0_reduced_for_pile(px, py, pile_dia, eval_d, vertices) * eval_d * 10000
             if A_punch_pile_cm2 > 0: v_u_pile_punching_max = max(v_u_pile_punching_max, (p_ult_reactions[idx] * 1000) / A_punch_pile_cm2)
 
-    # 3. Wide-Beam Shear
     cut_y_top = cy/2 + eval_d
     bw_top = get_polygon_section_width_at_y(cut_y_top, vertices) * 100
     v_u_wb_top_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if py >= cut_y_top and r > 0) / (bw_top * eval_d * 100) if bw_top > 0 else 0
@@ -338,9 +307,8 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     bw_bot = get_polygon_section_width_at_y(cut_y_bot, vertices) * 100
     v_u_wb_bot_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if py <= cut_y_bot and r > 0) / (bw_bot * eval_d * 100) if bw_bot > 0 else 0
     
-    # [วิชาการ 2.3]: นำค่า FDM 3rd Derivative Shear มาเทียบใช้ร่วมกับ Static Shear
     v_u_wb_fdm_stress = V_fdm / (max(cx, cy) * 100 * eval_d * 100) if max(cx, cy) > 0 else 0
-    v_u_wb_max = max(v_u_wb_top_stress, v_u_wb_bot_stress, v_u_wb_fdm_stress * 0.7) # ถ่วงน้ำหนักความปลอดภัย
+    v_u_wb_max = max(v_u_wb_top_stress, v_u_wb_bot_stress, v_u_wb_fdm_stress * 0.7) 
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
     
     is_safe = (v_u_col_punching_stress <= v_c_allow_col_punching) and (v_u_pile_punching_max <= v_c_allow_pile_punching) and (v_u_wb_max <= v_c_allow_wb)
@@ -348,7 +316,6 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
 
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
     width_cm = max(width_cm, 30.0)
-    # [วิชาการ 2.3]: ปริมาณเหล็กเสริมต่ำสุดสำหรับชิ้นส่วนรับแรงดัด (Flexural Member ACI)
     rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
     As_min = rho_min * width_cm * d_cm
     cover_deduction = cover_cm * 2 
@@ -367,7 +334,7 @@ def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex,
     return n_bars, min(math.floor((width_cm - cover_deduction) / (n_bars - 1)) if n_bars > 1 else 15, s_max), False, As_req
 
 # =========================================================================
-# VISUALIZATION FUNCTIONS (ENHANCED 2D/3D)
+# VISUALIZATION FUNCTIONS 
 # =========================================================================
 def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pile_l, columns_list, cg_x, cg_y):
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -470,7 +437,7 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # APPLICATION LAYOUT & UI 
 # =========================================================================
 with st.sidebar:
-    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V9.0")
+    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V9.1")
     footing_shape_type = st.selectbox("รูปทรงเรขาคณิตและชนิดฐานราก:", ["Truncated Triangular Footing", "Rectangular Footing", "Combined Footing (>= 2 Columns)", "Strap Footing (ชิดเขต)", "Arbitrary Freeform Polygon"], index=0)
     col_position = st.selectbox("ตำแหน่งเสาตอม่อ (Column Position):", ["Interior", "Edge", "Corner"], index=0)
     
@@ -487,7 +454,7 @@ with st.sidebar:
     st.subheader("🌪️ แรงเฉือนแนวราบ & แผ่นดินไหว")
     V_x = st.number_input("แรงเฉือนระดับแนวราบ V_x (ตัน)", value=0.0)
     V_y = st.number_input("แรงเฉือนระดับแนวราบ V_y (ตัน)", value=0.0)
-    T_z = st.number_input("แรงบิดบิดหมุนที่หัวเสา T_z (ตัน-เมตร)", value=0.0)
+    T_z = st.number_input("แรงบิดหมุนที่หัวเสา T_z (ตัน-เมตร)", value=0.0)
 
     st.subheader("💧 การควบคุมความกว้างรอยร้าว")
     env_condition = st.selectbox("สภาวะการใช้งานควบคุมรอยร้าว:", ["ทั่วไป (สภาวะปกติ - Max 0.30mm)", "โครงสร้างกันน้ำ / กัดกร่อนสูง (Max 0.15mm)"])
@@ -519,19 +486,16 @@ with st.sidebar:
         concrete_vertices_base = [(-B_ft/2, -L_ft/2), (B_ft/2, -L_ft/2), (B_ft/2, L_ft/2), (-B_ft/2, L_ft/2)]
         B_max_visual = B_ft
     elif footing_shape_type == "Combined Footing (>= 2 Columns)":
-        st.info("📊 โมดูลฐานรากร่วมรับเสาตอม่อ 2 ต้น")
         n_piles = 6
         piles_ideal = [(-1.2, -0.6), (0.0, -0.6), (1.2, -0.6), (-1.2, 0.6), (0.0, 0.6), (1.2, 0.6)]
         columns_list = [(-1.0, 0.0), (1.0, 0.0)]
         concrete_vertices_base = [(-2.0, -1.2), (2.0, -1.2), (2.0, 1.2), (-2.0, 1.2)]
         B_max_visual = 4.0
     elif footing_shape_type == "Strap Footing (ชิดเขต)":
-        st.info("🔗 โมดูลระบบคานรัดส่งถ่ายโมเมนต์สมดุล")
         n_piles, piles_ideal = 4, [(-1.5, -0.5), (-1.5, 0.5), (1.5, -0.5), (1.5, 0.5)]
         columns_list, concrete_vertices_base = [(-1.8, 0.0), (1.5, 0.0)], [(-2.3, -1.0), (2.3, -1.0), (2.3, 1.0), (-2.3, 1.0)]
         B_max_visual = 4.6
     else: 
-        st.info("🗺️ ปลดล็อกวาดรูปทรงอิสระ (ระบุจุดต่อจุด)")
         n_piles = st.number_input("จำนวนเสาเข็มสำหรับฐานรากอิสระ (ต้น)", value=4, min_value=1, max_value=20, step=1)
         piles_ideal = []
         cols_grid, rows_grid = math.ceil(math.sqrt(n_piles)), math.ceil(n_piles / math.ceil(math.sqrt(n_piles)))
@@ -589,7 +553,7 @@ concrete_vertices = [(v[0] - ecc_x, v[1] - ecc_y) for v in concrete_vertices_bas
 
 poly_path_check = Path(concrete_vertices)
 outside_piles = [f"P{idx+1}" for idx, p in enumerate(piles_actual) if not (poly_path_check.contains_point(p) or poly_path_check.contains_point(p, radius=0.01))]
-if outside_piles: st.error(f"🚨 **Engineering Validation Failed:** เสาเข็ม `{', '.join(outside_piles)}` มีพิกัดหน้างานหลุดออกไปนอกแนวขอบของฐานราก!")
+if outside_piles: st.error(f"🚨 **Engineering Validation Failed:** เสาเข็ม `{', '.join(outside_piles)}` หลุดออกไปนอกแนวขอบของฐานราก!")
 
 footing_area = polygon_area(concrete_vertices)
 W_soil = max(0.0, footing_area - (cx*cy)) * soil_depth * soil_density
@@ -612,7 +576,10 @@ else:
     safe, v_up_col, v_cp_col, v_up_pile, v_cp_pile, v_uwb, v_cwb, p_ult_out, Mu_x_max_fdm, Mu_y_max_fdm, V_fdm = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks, pile_tension_cap=pile_tension_cap)
 
-P_u_total = P_ultimate + factor_dl * ((footing_area * t_actual * 2.4) + W_soil)
+# Global Variables for Report
+w_u_footing = factor_dl * (footing_area * t_actual * 2.4)
+w_u_soil = factor_dl * W_soil
+P_u_total = P_ultimate + w_u_footing + w_u_soil
 polar_R_sum = max(sum(prx**2 + pry**2 for prx, pry in piles_relative), 1.0)
 pile_horizontal_shear = [math.hypot((V_x / n_piles) - (T_z * pry / polar_R_sum), (V_y / n_piles) + (T_z * prx / polar_R_sum)) for prx, pry in piles_relative]
 
@@ -631,14 +598,15 @@ n_bars_y, sp_y, _, as_req_y = design_rebar_by_axis(Mu_y_max_fdm, w_flex_y, d_act
 calculated_w = evaluate_gergely_lutz_crack(Ms_x_max_fdm, n_bars_x * ab_area, d_actual*100, concrete_cover_cm, bar_dia, sp_x)
 
 st.markdown("---")
-max_cantilever_x = max([abs(v[0]) for v in concrete_vertices]) - cx/2
-is_ld_ok, req_ld_cm, act_ld_cm = evaluate_development_length(fy, fc_prime, bar_dia, max_cantilever_x, concrete_cover_cm)
-if not is_ld_ok: st.warning(f"⚠️ **แจ้งเตือนระยะล้วงเกาะ:** ยื่นวิกฤตสั้นเกินไป (ต้องการ L_d={req_ld_cm:.1f}cm แต่มีเพียง {act_ld_cm:.1f}cm) แนะนำให้ออกแบบเป็นงอขอมาตรฐาน")
 
 # =========================================================================
-# DISPLAY & INTERFACE REPORT
+# DISPLAY & INTERFACE REPORT WITH NEW CALCULATION SHEET TAB
 # =========================================================================
-tab_report, tab_visuals = st.tabs(["📊 2. รายงานผลการวิเคราะห์ & Serviceability", "🗺️ 3. Engineering Visual Twin Plots (2D/3D)"])
+tab_report, tab_calc, tab_visuals = st.tabs([
+    "📊 2. รายงานผลสรุป (Summary)", 
+    "📄 3. รายการคำนวณละเอียด (Step-by-Step Calc)", 
+    "🗺️ 4. Engineering Visual Twin (2D/3D)"
+])
 
 with tab_report:
     tension_warnings = [f"P{idx+1} (แรงถอน {abs(r_s):.2f} ตัน)" for idx, r_s in enumerate(pile_service_reactions) if r_s < 0 and abs(r_s) > pile_tension_cap]
@@ -667,6 +635,69 @@ with tab_report:
         st.write("**ตารางสรุปผลแรงปฏิกิริยาหัวเสาเข็มรอบทิศทาง**")
         df_react = pd.DataFrame({'ชื่อเข็ม': st.session_state.pile_data['ชื่อเข็ม'], 'R_u (ดิ่ง-ตัน)': p_ult_out, 'R_s (ดิ่งใช้งาน-ตัน)': pile_service_reactions, 'V_i (ราบแผ่นดินไหว-ตัน)': pile_horizontal_shear})
         st.dataframe(df_react.style.highlight_max(subset=['V_i (ราบแผ่นดินไหว-ตัน)'], color='#f5b041'), hide_index=True, use_container_width=True)
+
+with tab_calc:
+    st.markdown("## 📄 รายงานการคำนวณออกแบบฐานราก (Calculation Report)")
+    st.markdown("**วิธีการวิเคราะห์:** Advanced Flexible Plate (FDM Energy Formulation) + Wood-Armer Equations")
+    st.markdown("**อ้างอิงมาตรฐาน:** ACI 318-19 / วสท.")
+    st.divider()
+
+    st.markdown("### 📌 ส่วนที่ 1: ข้อมูลพารามิเตอร์ (Design Parameters)")
+    st.markdown(f"""
+    - **กำลังอัดคอนกรีต ($f'_c$):** {fc_prime} ksc
+    - **กำลังครากเหล็กเสริม ($f_y$):** {fy} ksc
+    - **ขนาดตอม่อ ($c_x \\times c_y$):** {cx} m $\\times$ {cy} m
+    - **ความหนาฐานราก ($t$):** {t_actual:.2f} m
+    - **ความลึกประสิทธิผล ($d$):** {d_actual:.3f} m (หักระยะหุ้ม {concrete_cover_cm} cm และระยะฝัง {pile_embed_cm} cm)
+    - **เหล็กเสริมหลัก:** DB{bar_dia} (พื้นที่ {ab_area:.2f} $\\text{{cm}}^2$)
+    - **ความแข็งสปริงเสาเข็ม ($k_s$):** {pile_ks:,.2f} Ton/m
+    """)
+
+    st.markdown("### 📌 ส่วนที่ 2: น้ำหนักบรรทุกประลัย (Ultimate Loads)")
+    st.latex(rf"P_{{ult}} = ({factor_dl} \times DL) + ({factor_ll} \times LL) = ({factor_dl} \times {DL}) + ({factor_ll} \times {LL}) = {P_ultimate:.2f} \text{{ Ton}}")
+    st.latex(rf"W_{{footing\_u}} = \gamma_{{DL}} \times (Area \times t \times 2.4) = {factor_dl} \times ({footing_area:.2f} \times {t_actual:.2f} \times 2.4) = {w_u_footing:.2f} \text{{ Ton}}")
+    st.latex(rf"W_{{soil\_u}} = \gamma_{{DL}} \times W_{{soil}} = {factor_dl} \times {W_soil:.2f} = {w_u_soil:.2f} \text{{ Ton}}")
+    st.latex(rf"\Sigma P_{{total\_u}} = {P_ultimate:.2f} + {w_u_footing:.2f} + {w_u_soil:.2f} = {P_u_total:.2f} \text{{ Ton}}")
+
+    report_Ec_mpa = 4700 * math.sqrt(fc_prime * 0.0980665)
+    report_Ec_ton = report_Ec_mpa * 101.9716
+    report_D = (report_Ec_ton * (t_actual**3)) / (12 * (1 - 0.15**2))
+    
+    st.markdown("### 📌 ส่วนที่ 3: ความแข็งเกร็งของแผ่นพื้น (Flexural Rigidity, $D$)")
+    st.latex(rf"E_c = 4700\sqrt{{f'_c \text{{ (MPa)}}}} = {report_Ec_ton:,.0f} \text{{ Ton/m}}^2")
+    st.latex(rf"D = \frac{{E_c t^3}}{{12(1-\nu^2)}} = \frac{{{report_Ec_ton:,.0f} \times {t_actual:.2f}^3}}{{12(1 - 0.15^2)}} = {report_D:,.2f} \text{{ Ton-m}}")
+
+    st.markdown("### 📌 ส่วนที่ 4: การตรวจสอบแรงเฉือน (Shear Validation)")
+    report_b0_col = 2 * ((cx + d_actual) + (cy + d_actual))
+    st.markdown("**4.1 แรงเฉือนทะลุตอม่อ (Column Punching Shear)**")
+    st.latex(rf"b_{{0\_col}} = 2((c_x + d) + (c_y + d)) = {report_b0_col:.3f} \text{{ m}}")
+    st.latex(rf"v_c = \min\left(0.53\left(1+\frac{{2}}{{\beta}}\right)\sqrt{{f'_c}}, \dots, 1.06\sqrt{{f'_c}}\right) \times \phi = {v_cp_col:.2f} \text{{ ksc}}")
+    st.latex(rf"v_{{u\_col}} = {v_up_col:.2f} \text{{ ksc}} \le {v_cp_col:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_up_col <= v_cp_col else 'FAIL'}}}")
+
+    st.markdown("**4.2 แรงเฉือนทะลุเสาเข็ม (Pile Punching Shear)**")
+    st.latex(rf"v_{{c\_pile}} = \phi 1.06\sqrt{{f'_c}} = {v_cp_pile:.2f} \text{{ ksc}}")
+    st.latex(rf"v_{{u\_pile}} = {v_up_pile:.2f} \text{{ ksc}} \le {v_cp_pile:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_up_pile <= v_cp_pile else 'FAIL'}}}")
+
+    st.markdown("**4.3 แรงเฉือนคานกว้าง (Wide-Beam Shear)**")
+    st.latex(rf"v_{{c\_wb}} = \phi 0.53\sqrt{{f'_c}} = {v_cwb:.2f} \text{{ ksc}}")
+    st.latex(rf"v_{{u\_wb}} = \max(v_{{static}}, 0.70v_{{FDM}}) = {v_uwb:.2f} \text{{ ksc}} \le {v_cwb:.2f} \text{{ ksc}} \rightarrow \textbf{{{'SAFE' if v_uwb <= v_cwb else 'FAIL'}}}")
+
+    report_rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
+    report_As_min = report_rho_min * 100 * (d_actual * 100)
+    
+    st.markdown("### 📌 ส่วนที่ 5: การออกแบบเหล็กเสริมรับแรงดัด (Flexural Design)")
+    st.latex(rf"\rho_{{min}} = \max \left( \frac{{0.8\sqrt{{f'_c}}}}{{f_y}}, \frac{{14}}{{f_y}} \right) = \max \left( \frac{{0.8\sqrt{{{fc_prime}}}}}{{{fy}}}, \frac{{14}}{{{fy}}} \right) = {report_rho_min:.5f}")
+    st.latex(rf"A_{{s,min}} = \rho_{{min}} b d = {report_rho_min:.5f} \times 100 \times {d_actual*100:.1f} = {report_As_min:.2f} \text{{ cm}}^2/\text{{m}}")
+    
+    st.markdown("**แกน X (คำนวณจาก Wood-Armer $M_x^*$):**")
+    st.latex(rf"A_{{s,req(X)}} = {as_req_x:.2f} \text{{ cm}}^2/\text{{m}} \rightarrow \textbf{{ใช้ {n_bars_x}-DB{bar_dia} @ {sp_x} cm}} \text{{ (}} A_s = {ab_area * (100/sp_x):.2f} \text{{ cm}}^2/\text{{m}} \text{{)}}")
+    
+    st.markdown("**แกน Y (คำนวณจาก Wood-Armer $M_y^*$):**")
+    st.latex(rf"A_{{s,req(Y)}} = {as_req_y:.2f} \text{{ cm}}^2/\text{{m}} \rightarrow \textbf{{ใช้ {n_bars_y}-DB{bar_dia} @ {sp_y} cm}} \text{{ (}} A_s = {ab_area * (100/sp_y):.2f} \text{{ cm}}^2/\text{{m}} \text{{)}}")
+
+    st.markdown("### 📌 ส่วนที่ 6: การตรวจสอบรอยร้าว (Serviceability Check)")
+    st.latex(rf"w_{{crack}} = 11 \times 10^{{-6}} \beta f_s \sqrt[3]{{d_c A_{{eff}}}} = {calculated_w:.3f} \text{{ mm}}")
+    st.latex(rf"{calculated_w:.3f} \text{{ mm}} \le {w_allowable} \text{{ mm}} \rightarrow \textbf{{{'PASSED' if calculated_w <= w_allowable else 'EXCEEDED'}}}")
 
 with tab_visuals:
     col_plot1, col_plot2 = st.columns(2)
