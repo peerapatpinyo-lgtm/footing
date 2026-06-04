@@ -818,7 +818,8 @@ if thickness_mode == "Auto-Optimize":
     while d_opt <= max_d and loop_counter < max_loops:
         loop_counter += 1
         t_opt = d_opt + max(concrete_cover_cm/100, pile_embed_cm/100) + ((bar_dia/1000)/2)
-        safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
+        # [แก้ไขรับตัวแปร 8 ค่า]
+        safe, v_up_col, v_cp_col, v_up_pile, v_cp_pile, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
             d_opt, t_opt, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
         )
         if safe: break
@@ -829,13 +830,15 @@ if thickness_mode == "Auto-Optimize":
         st.stop() 
         
     t_actual = math.ceil(t_opt * 20) / 20; d_actual = d_opt
-    safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
+    # [แก้ไขรับตัวแปร 8 ค่า]
+    safe, v_up_col, v_cp_col, v_up_pile, v_cp_pile, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
 else:
     t_actual = manual_t
     d_actual = compute_effective_depth(t_actual, concrete_cover_cm, pile_embed_cm, bar_dia)
-    safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
+    # [แก้ไขรับตัวแปร 8 ค่า]
+    safe, v_up_col, v_cp_col, v_up_pile, v_cp_pile, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
 
@@ -856,7 +859,8 @@ P_service_total = DL + LL + (footing_area * t_actual * 2.4) + W_soil
 Ms_cx_total = Ms_cx + P_service_total * ecc_y
 Ms_cy_total = Ms_cy + P_service_total * ecc_x
 
-pile_service_reactions = compute_flexible_reactions(concrete_vertices, piles_actual, columns_list, P_service_total, Ms_cx_total, Ms_cy_total, t_actual, fc_prime, pile_ks)
+# [แก้ไขรับตัวแปร 3 ค่า]
+pile_service_reactions, _, _ = compute_flexible_reactions(concrete_vertices, piles_actual, columns_list, P_service_total, Ms_cx_total, Ms_cy_total, t_actual, fc_prime, pile_ks)
 
 has_tension = any(r < 0 for r in p_ult_out)
 require_top_steel = has_tension or (t_actual >= 0.60) 
@@ -926,7 +930,8 @@ with tab_report:
         st.write(f"* แกน Y (Mu_y = {Mu_y_max:.2f} t-m): ใช้ `{n_bars_y}-DB{bar_dia} @ {sp_y:.0f} cm`")
         
         st.write(f"**Shear Check (d = {d_actual:.2f} m)**")
-        st.write(f"* v_up (Punching): `{v_up:.2f}` KSC (≤ {v_cp:.2f} KSC) [{'✅ Safe' if v_up <= v_cp else '❌ Overstressed'}]")
+        st.write(f"* v_up (Punching ตอม่อ): `{v_up_col:.2f}` KSC (≤ {v_cp_col:.2f} KSC) [{'✅ Safe' if v_up_col <= v_cp_col else '❌ Overstressed'}]")
+        st.write(f"* v_up (Punching เสาเข็ม): `{v_up_pile:.2f}` KSC (≤ {v_cp_pile:.2f} KSC) [{'✅ Safe' if v_up_pile <= v_cp_pile else '❌ Overstressed'}]")
         st.write(f"* v_uwb (Wide-beam): `{v_uwb:.2f}` KSC (≤ {v_cwb:.2f} KSC) [{'✅ Safe' if v_uwb <= v_cwb else '❌ Overstressed'}]")
 
     with col_res2:
