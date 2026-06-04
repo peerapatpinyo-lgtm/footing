@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 # =========================================================================
 # SYSTEM STABILITY & FONT MANAGEMENT
 # =========================================================================
-st.set_page_config(page_title="Enterprise Footing Suite V8.5 - Flexible Engine", page_icon="📐", layout="wide")
+st.set_page_config(page_title="Enterprise Footing Suite V8.6 - Flexible Engine", page_icon="📐", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def initialize_thai_font_system():
@@ -44,10 +44,6 @@ current_thai_font = initialize_thai_font_system()
 # ADVANCED ENGINEERING SOLVER: WINKLER FOUNDATION (FDM GRID ENGINE)
 # =========================================================================
 def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, M_y, t_actual, fc_prime, pile_ks):
-    """
-    วิเคราะห์เสาเข็มและฐานรากแบบยืดหยุ่น (Flexible Winkler Foundation)
-    จำลองพฤติกรรมแผ่นคอนกรีตที่มีการโก่งตัวจริง และเสาเข็มเป็นฐานรองรับแบบสปริง
-    """
     x_coords = [v[0] for v in vertices]
     y_coords = [v[1] for v in vertices]
     xmin, xmax = min(x_coords), max(x_coords)
@@ -162,7 +158,6 @@ def compute_flexible_reactions(vertices, piles_act, columns_list, P_total, M_x, 
         return [P_total / len(piles_act)] * len(piles_act)
         
     reactions = [w_disp[g_idx] * pile_ks for g_idx in pile_node_indices]
-    
     sum_r = sum(reactions) if sum(reactions) > 0 else 1.0
     return [r * (P_total / sum_r) for r in reactions]
 
@@ -181,15 +176,15 @@ def polygon_area(vertices):
 def compute_polygon_advanced_properties(vertices):
     n = len(vertices)
     area = 0.0
-    cx, cy = 0.0, 0.0
+    cx_g, cy_g = 0.0, 0.0
     Ixx, Iyy, Ixy = 0.0, 0.0, 0.0
     
     for i in range(n):
         j = (i + 1) % n
         factor = (vertices[i][0] * vertices[j][1]) - (vertices[j][0] * vertices[i][1])
         area += factor
-        cx += (vertices[i][0] + vertices[j][0]) * factor
-        cy += (vertices[i][1] + vertices[j][1]) * factor
+        cx_g += (vertices[i][0] + vertices[j][0]) * factor
+        cy_g += (vertices[i][1] + vertices[j][1]) * factor
         Ixx += (vertices[i][1]**2 + vertices[i][1]*vertices[j][1] + vertices[j][1]**2) * factor
         Iyy += (vertices[i][0]**2 + vertices[i][0]*vertices[j][0] + vertices[j][0]**2) * factor
         Ixy += (vertices[i][0]*vertices[j][1] + 2*vertices[i][0]*vertices[i][1] + 2*vertices[j][0]*vertices[j][1] + vertices[j][0]*vertices[i][1]) * factor
@@ -197,12 +192,12 @@ def compute_polygon_advanced_properties(vertices):
     area = area / 2.0
     if abs(area) < 1e-6: return 1.0, 0.0, 0.0, 1.0, 1.0, 0.0
     area = abs(area)
-    cx /= (6.0 * area)
-    cy /= (6.0 * area)
-    Ixx = abs(Ixx / 12.0) - area * cy**2
-    Iyy = abs(Iyy / 12.0) - area * cx**2
-    Ixy = abs(Ixy / 24.0) - area * cx * cy
-    return area, cx, cy, max(0.001, Ixx), max(0.001, Iyy), Ixy
+    cx_g /= (6.0 * area)
+    cy_g /= (6.0 * area)
+    Ixx = abs(Ixx / 12.0) - area * cy_g**2
+    Iyy = abs(Iyy / 12.0) - area * cx_g**2
+    Ixy = abs(Ixy / 24.0) - area * cx_g * cy_g
+    return area, cx_g, cy_g, max(0.001, Ixx), max(0.001, Iyy), Ixy
 
 def get_polygon_section_width_at_y(target_y, vertices):
     intersections = []
@@ -213,7 +208,6 @@ def get_polygon_section_width_at_y(target_y, vertices):
         if (y1 <= target_y and y2 > target_y) or (y2 <= target_y and y1 > target_y):
             x_int = x1 + (target_y - y1) * (x2 - x1) / (y2 - y1)
             intersections.append(x_int)
-    
     if len(intersections) >= 2:
         intersections.sort()
         width = sum(intersections[i+1] - intersections[i] for i in range(0, len(intersections)-1, 2))
@@ -229,7 +223,6 @@ def get_polygon_section_height_at_x(target_x, vertices):
         if (x1 <= target_x and x2 > target_x) or (x2 <= target_x and x1 > target_x):
             y_int = y1 + (target_x - x1) * (y2 - y1) / (x2 - x1)
             intersections.append(y_int)
-            
     if len(intersections) >= 2:
         intersections.sort()
         height = sum(intersections[i+1] - intersections[i] for i in range(0, len(intersections)-1, 2))
@@ -255,11 +248,9 @@ def calculate_b0_reduced_for_pile(px, py, pile_w, eval_d, vertices):
         x1, y1 = vertices[i]
         x2, y2 = vertices[(i+1)%n]
         dist_to_edges.append(point_to_segment_dist(px, py, x1, y1, x2, y2))
-    
     min_dist = min(dist_to_edges) if dist_to_edges else 999
     crit_dist = (pile_w / 2) + (eval_d / 2)
     b0_standard = 4 * (pile_w + eval_d)
-    
     if min_dist < crit_dist:
         if min_dist > pile_w / 2: return 3 * (pile_w + eval_d)
         else: return 2 * (pile_w + eval_d)
@@ -290,12 +281,10 @@ def evaluate_gergely_lutz_crack(Ms_ton_m, As_cm2, d_cm, cover_cm, bar_mm, spacin
     fs_mpa = fs_ksc * 0.0980665
     fy_mpa = 400.0
     if fs_mpa > 0.6 * fy_mpa: fs_mpa = 0.6 * fy_mpa
-        
     dc_mm = (cover_cm * 10.0) + (bar_mm / 2.0)
     s_mm = (spacing_cm * 10.0) if spacing_cm > 0 else 150.0
     A_eff_mm2 = 2.0 * dc_mm * s_mm
     beta = 1.20
-    
     w_crack = 11.0e-6 * beta * fs_mpa * ((dc_mm * A_eff_mm2)**(1/3))
     return w_crack
 
@@ -407,7 +396,7 @@ def generate_2d_plan_view(vertices, cx, cy, piles_actual, pile_shape, pile_w, pi
         ax.add_patch(pile_patch)
         ax.text(px, py, f"P{i+1}", ha='center', va='center', color='white', fontsize=9, fontweight='bold')
         
-    ax.plot(cg_x, cg_y, 'X', color='#e67e22', markersize=10, label=f'C.G. เข็มเยื้องจริง ({cg_x:.2f}, {cg_y:.2f})')
+    ax.plot(grid_to_global_x:=cg_x, grid_to_global_y:=cg_y, 'X', color='#e67e22', markersize=10, label=f'C.G. เข็มเยื้องจริง ({cg_x:.2f}, {cg_y:.2f})')
     ax.plot([0, cg_x], [0, cg_y], ':', color='#d35400', linewidth=1.5)
 
     ax.axhline(0, color='black', linewidth=0.5, linestyle='--')
@@ -522,7 +511,6 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
             pile_verts = [(px-pile_w/2, py-pile_l/2), (px+pile_w/2, py-pile_l/2), (px+pile_w/2, py+pile_l/2), (px-pile_w/2, py+pile_l/2)]
             
         fig_3d.add_trace(create_3d_prism_trace(pile_verts, pile_bottom_z, pile_top_z, '#7f8c8d', 0.8, f'เสาเข็ม P{index+1}', show_legend=False))
-        
         fig_3d.add_trace(go.Scatter3d(
             x=[px], y=[py], z=[pile_top_z + 0.05],
             mode='text', text=[f"P{index+1}"], textposition="top center",
@@ -531,10 +519,10 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 
     fig_3d.update_layout(
         scene=dict(
-            aspectmode='data',
             xaxis_title='แกน X (ม.)',
             yaxis_title='แกน Y (ม.)',
-            zaxis_title='แกน Z (ม.)'
+            zaxis_title='แกน Z (ม.)',
+            aspectmode='data'
         ),
         margin=dict(l=0, r=0, b=0, t=30)
     )
@@ -544,11 +532,18 @@ def generate_3d_mesh(concrete_vertices_tuple, t_actual, cx, cy, piles_actual_tup
 # APPLICATION LAYOUT & UI 
 # =========================================================================
 with st.sidebar:
-    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V8.5")
+    st.header("🏗️ ข้อมูลการออกแบบฐานรากตอม่อ V8.6")
     footing_shape_type = st.selectbox("รูปทรงเรขาคณิตและชนิดฐานราก:", 
         ["Truncated Triangular Footing", "Rectangular Footing", "Combined Footing (>= 2 Columns)", "Strap Footing (ชิดเขต)", "Arbitrary Freeform Polygon"], index=0)
     col_position = st.selectbox("ตำแหน่งเสาตอม่อ (Column Position):", ["Interior", "Edge", "Corner"], index=0)
     
+    # [UPDATED] ย้ายคุณสมบัติวัสดุและขนาดตอม่อเข้า Sidebar
+    st.subheader("🧱 คุณสมบัติวัสดุ & หน้าตัดตอม่อ")
+    fc_prime = st.number_input("กำลังอัดคอนกรีต fc' (ksc)", value=280, min_value=150, step=10)
+    fy = st.number_input("กำลังรับแรงดึงเหล็กเสริม fy (ksc)", value=4000, min_value=2400, step=100)
+    cx = st.number_input("ขนาดตอม่อแกน X - cx (ม.)", value=0.35, min_value=0.10, step=0.05)
+    cy = st.number_input("ขนาดตอม่อแกน Y - cy (ม.)", value=0.35, min_value=0.10, step=0.05)
+
     st.subheader("🛠️ User-Defined Load Factors")
     factor_dl = st.number_input("γ_DL (Dead Load Factor)", value=1.2, step=0.1)
     factor_ll = st.number_input("γ_LL (Live Load Factor)", value=1.6, step=0.1)
@@ -615,12 +610,37 @@ with st.sidebar:
         concrete_vertices_base = [(-2.3, -1.0), (2.3, -1.0), (2.3, 1.0), (-2.3, 1.0)]
         B_max_visual = 4.6
     else: 
+        # [UPDATED] เปิดให้ระบุพิกัดและจำนวนเข็มในรูปทรงอิสระอย่างไดนามิก
         st.info("🗺️ ปลดล็อกวาดรูปทรงอิสระ (ระบุจุดต่อจุด)")
-        n_piles = 4
-        piles_ideal = [(-0.8, -0.8), (0.8, -0.8), (0.8, 0.8), (-0.8, 0.8)]
-        concrete_vertices_base = [(-1.5, 1.5), (0.5, 1.5), (0.5, -0.5), (1.5, -0.5), (1.5, -1.5), (-1.5, -1.5)]
+        n_piles = st.number_input("จำนวนเสาเข็มสำหรับฐานรากอิสระ (ต้น)", value=4, min_value=1, max_value=20, step=1)
+        
+        # จัดเรียงโครงเสาเข็มในอุดมคติเบื้องต้น
+        piles_ideal = []
+        cols_grid = math.ceil(math.sqrt(n_piles))
+        rows_grid = math.ceil(n_piles / cols_grid)
+        idx_p = 0
+        for r in range(rows_grid):
+            for c in range(cols_grid):
+                if idx_p < n_piles:
+                    piles_ideal.append(((c - (cols_grid - 1)/2) * 0.9, (r - (rows_grid - 1)/2) * 0.9))
+                    idx_p += 1
+                    
+        st.write("🔧 แก้ไขพิกัดจุดยอดของฐานราก (ทวนเข็มนาฬิกา):")
+        if "poly_vertices" not in st.session_state:
+            st.session_state.poly_vertices = pd.DataFrame({
+                'X (ม.)': [-1.5, 0.5, 0.5, 1.5, 1.5, -1.5],
+                'Y (ม.)': [1.5, 1.5, -0.5, -0.5, -1.5, -1.5]
+            })
+        edited_v_df = st.data_editor(st.session_state.poly_vertices, num_rows="dynamic", use_container_width=True, key="poly_v_editor_key")
+        st.session_state.poly_vertices = edited_v_df
+        concrete_vertices_base = list(zip(edited_v_df['X (ม.)'], edited_v_df['Y (ม.)']))
+        if len(concrete_vertices_base) < 3:
+            st.error("❌ รูปทรงฐานรากต้องมีจุดยอดอย่างน้อย 3 จุด")
+            st.stop()
+            
         _, _, _, _, _, I_xy_geom = compute_polygon_advanced_properties(concrete_vertices_base)
-        B_max_visual = 3.0
+        x_coords_v = [v[0] for v in concrete_vertices_base]
+        B_max_visual = max(x_coords_v) - min(x_coords_v) if x_coords_v else 3.0
 
     st.subheader("3. นน.บรรทุกตอม่อและวัสดุ")
     DL = st.number_input("Dead Load (ตัน)", value=55.0)
@@ -628,8 +648,7 @@ with st.sidebar:
     
     Mcx_dl, Mcy_dl, Mcx_ll, Mcy_ll = 6.0, 5.0, 4.0, 3.0
     soil_depth = 1.0; soil_density = 1.8
-    cx, cy = 0.35, 0.35
-    fc_prime = 280; fy = 4000 
+    
     bar_dia = st.selectbox("ขนาดเหล็กแกน DB (มม.)", [12, 16, 20, 25, 28, 32], index=2)
     
     thickness_mode = st.radio("โหมดกำหนดความหนา t:", ["Auto-Optimize", "Manual Override"])
@@ -699,6 +718,17 @@ Ms_cx = Mcx_dl + Mcx_ll
 Ms_cy = Mcy_dl + Mcy_ll
 
 concrete_vertices = [(v[0] - ecc_x, v[1] - ecc_y) for v in concrete_vertices_base]
+
+# [ADDED] ระบบ Engineering Validation: ตรวจสอบเสาเข็มหลุดออกนอกขอบเขตฐานรากคอนกรีตหรือไม่
+poly_path_check = Path(concrete_vertices)
+outside_piles = []
+for idx, p in enumerate(piles_actual):
+    if not (poly_path_check.contains_point(p) or poly_path_check.contains_point(p, radius=0.01)):
+        outside_piles.append(f"P{idx+1}")
+
+if outside_piles:
+    st.error(f"🚨 **ตรวจพบความผิดพลาดทางวิศวกรรม (Engineering Validation Failed):** เสาเข็มต้นต่อไปนี้ `{', '.join(outside_piles)}` มีพิกัดหน้างานหลุดออกไปนอกแนวขอบของฐานรากคอนกรีต! กรุณาตรวจสอบหรือแก้ไขระยะเยื้องศูนย์หน้างาน")
+
 footing_area = polygon_area(concrete_vertices)
 W_soil = max(0.0, footing_area - (cx*cy)) * soil_depth * soil_density
 
@@ -721,7 +751,6 @@ if thickness_mode == "Auto-Optimize":
         st.stop() 
         
     t_actual = math.ceil(t_opt * 20) / 20; d_actual = d_opt
-    # [FIXED] รันซ้ำอีกครั้งด้วยความหนาที่ทำการปัดเศษจริง เพื่อให้แรงเฉือนและปฏิกิริยาสอดคล้องถูกต้อง
     safe, v_up, v_cp, v_uwb, v_cwb, p_ult_out = execute_shear_evaluation_routine(
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
@@ -732,7 +761,6 @@ else:
         d_actual, t_actual, footing_area, W_soil, P_ultimate, Mu_cx, Mu_cy, ecc_x, ecc_y, n_piles, piles_relative, piles_actual, I_xx_group, I_yy_group, cx, cy, fc_prime, col_position, concrete_vertices, factor_dl, columns_list, pile_dia=pile_w, I_xy=I_xy_geom, pile_ks=pile_ks
     )
 
-# [FIXED] ประกาศตัวแปร P_u_total ใน Global Scope เพื่อป้องกันข้อผิดพลาด NameError ใน Report Tab
 w_u_footing_weight = factor_dl * (footing_area * t_actual * 2.4)
 w_u_soil_weight = factor_dl * W_soil
 P_u_total = P_ultimate + w_u_footing_weight + w_u_soil_weight
