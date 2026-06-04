@@ -312,6 +312,7 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
             A_punch_pile_cm2 = calculate_b0_reduced_for_pile(px, py, pile_dia, eval_d, vertices) * eval_d * 10000
             if A_punch_pile_cm2 > 0: v_u_pile_punching_max = max(v_u_pile_punching_max, (p_ult_reactions[idx] * 1000) / A_punch_pile_cm2)
 
+    # --- เช็ก One-Way Shear (Beam Shear) ในแนวแกน Y (รอยตัดแนวตั้ง) ---
     cut_y_top = cy/2 + eval_d
     bw_top = get_polygon_section_width_at_y(cut_y_top, vertices) * 100
     v_u_wb_top_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if py >= cut_y_top and r > 0) / (bw_top * eval_d * 100) if bw_top > 0 else 0
@@ -320,13 +321,22 @@ def execute_shear_evaluation_routine(eval_d, eval_t, area, W_soil, P_ult, Mu_cx,
     bw_bot = get_polygon_section_width_at_y(cut_y_bot, vertices) * 100
     v_u_wb_bot_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if py <= cut_y_bot and r > 0) / (bw_bot * eval_d * 100) if bw_bot > 0 else 0
     
+    # --- [เพิ่มใหม่] เช็ก One-Way Shear (Beam Shear) ในแนวแกน X (รอยตัดแนวนอน) ---
+    cut_x_right = cx/2 + eval_d
+    bw_right = get_polygon_section_height_at_x(cut_x_right, vertices) * 100
+    v_u_wb_right_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if px >= cut_x_right and r > 0) / (bw_right * eval_d * 100) if bw_right > 0 else 0
+
+    cut_x_left = -(cx/2 + eval_d)
+    bw_left = get_polygon_section_height_at_x(cut_x_left, vertices) * 100
+    v_u_wb_left_stress = sum(r * 1000 for r, (px, py) in zip(p_ult_reactions, piles_act) if px <= cut_x_left and r > 0) / (bw_left * eval_d * 100) if bw_left > 0 else 0
+    
+    # นำผลรวมแกน X และ Y มาประเมินหาค่าวิกฤตที่สูงสุด
     v_u_wb_fdm_stress = V_fdm / (max(cx, cy) * 100 * eval_d * 100) if max(cx, cy) > 0 else 0
-    v_u_wb_max = max(v_u_wb_top_stress, v_u_wb_bot_stress, v_u_wb_fdm_stress * 0.7) 
+    v_u_wb_max = max(v_u_wb_top_stress, v_u_wb_bot_stress, v_u_wb_right_stress, v_u_wb_left_stress, v_u_wb_fdm_stress * 0.7) 
     v_c_allow_wb = phi_s * 0.53 * math.sqrt(fc_prime)
     
     is_safe = (v_u_col_punching_stress <= v_c_allow_col_punching) and (v_u_pile_punching_max <= v_c_allow_pile_punching) and (v_u_wb_max <= v_c_allow_wb)
     return is_safe, v_u_col_punching_stress, v_c_allow_col_punching, v_u_pile_punching_max, v_c_allow_pile_punching, v_u_wb_max, v_c_allow_wb, p_ult_reactions, Mx_star, My_star, V_fdm
-
 def design_rebar_by_axis(Mu_ton_m, width_cm, d_cm, t_cm, fc_prime, fy, phi_flex, ab_area, cover_cm, env_cond="ทั่วไป"):
     width_cm = max(width_cm, 30.0)
     rho_min = max(0.8 * math.sqrt(fc_prime) / fy, 14.0 / fy)
