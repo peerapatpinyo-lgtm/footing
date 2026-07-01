@@ -956,32 +956,69 @@ with tab_vis:
     st.markdown("## 📐 แบบขยายรายละเอียดวิศวกรรม (Engineering Visuals Layout)")
     st.markdown("แผนภาพแสดงความเปรียบเทียบระหว่าง **พิกัดตามแบบสั่งการ (Design)** และ **พิกัดที่ตอกจริงเยื้องศูนย์หน้างาน (As-built)**")
 
-    # 🔍 1. ระบบค้นหาตัวแปรขนาดเสาเข็มอัตโนมัติ เพื่อป้องกัน NameError
-    if 'pile_dia_mm' in locals() or 'pile_dia_mm' in globals():
-        p_dia_mm = pile_dia_mm
-    elif 'pile_dia' in locals() or 'pile_dia' in globals():
-        p_dia_mm = pile_dia if pile_dia > 5 else pile_dia * 1000
-    elif 'D' in locals() or 'D' in globals():
-        p_dia_mm = D if D > 5 else D * 1000
-    else:
-        # หากไม่พบตัวแปรจากส่วนอื่น ระบบจะสร้างช่องอินพุตให้ระบุขนาดได้โดยตรงที่แท็บนี้
-        p_dia_mm = st.number_input("ระบุขนาดเส้นผ่านศูนย์กลางเสาเข็ม D (mm)", min_value=150, max_value=1200, value=400, step=50, key="vis_tab_pile_dia")
-
-    # แปลงหน่วยเป็นเมตรสำหรับใช้คำนวณระยะเรขาคณิต
-    pile_dia_m = p_dia_mm / 1000.0
-    min_spacing_req = 3.0 * pile_dia_m   # เกณฑ์มาตรฐานระยะห่างระหว่างเข็ม >= 3.0D
-    min_edge_req = 1.25 * pile_dia_m     # เกณฑ์มาตรฐานระยะขอบฐานราก >= 1.25D
+    # 🛡️ ระบบดักจับตัวแปรอัตโนมัติเพื่อป้องกัน NameError 100%
     
+    # 1. ตรวจสอบความกว้างฐานราก (Width)
+    if 'B' in locals() or 'B' in globals():
+        footing_w = B if 'B' in locals() else globals()['B']
+    elif 'footing_width' in locals() or 'footing_width' in globals():
+        footing_w = footing_width if 'footing_width' in locals() else globals()['footing_width']
+    elif 'W_f' in locals() or 'W_f' in globals():
+        footing_w = W_f if 'W_f' in locals() else globals()['W_f']
+    else:
+        footing_w = st.number_input("ความกว้างฐานราก Width (m)", min_value=0.5, max_value=10.0, value=3.0, key="safe_fw")
+
+    # 2. ตรวจสอบความยาวฐานราก (Length)
+    if 'L' in locals() or 'L' in globals():
+        footing_l = L if 'L' in locals() else globals()['L']
+    elif 'footing_length' in locals() or 'footing_length' in globals():
+        footing_l = footing_length if 'footing_length' in locals() else globals()['footing_length']
+    elif 'L_f' in locals() or 'L_f' in globals():
+        footing_l = L_f if 'L_f' in locals() else globals()['L_f']
+    else:
+        footing_l = st.number_input("ความยาวฐานราก Length (m)", min_value=0.5, max_value=10.0, value=3.0, key="safe_fl")
+
+    # 3. ตรวจสอบขนาดเสาตอม่อแกน X
+    if 'cx' in locals() or 'cx' in globals():
+        cx_val = cx if 'cx' in locals() else globals()['cx']
+    elif 'a' in locals() or 'a' in globals():
+        cx_val = a if 'a' in locals() else globals()['a']
+    else:
+        cx_val = 0.4
+
+    # 4. ตรวจสอบขนาดเสาตอม่อแกน Y
+    if 'cy' in locals() or 'cy' in globals():
+        cy_val = cy if 'cy' in locals() else globals()['cy']
+    elif 'b' in locals() or 'b' in globals():
+        cy_val = b if 'b' in locals() else globals()['b']
+    else:
+        cy_val = 0.4
+
+    # 5. ตรวจสอบขนาดเส้นผ่านศูนย์กลางเสาเข็ม
+    if 'pile_dia_mm' in locals() or 'pile_dia_mm' in globals():
+        p_dia_mm = pile_dia_mm if 'pile_dia_mm' in locals() else globals()['pile_dia_mm']
+    elif 'pile_dia' in locals() or 'pile_dia' in globals():
+        v = pile_dia if 'pile_dia' in locals() else globals()['pile_dia']
+        p_dia_mm = v if v > 5 else v * 1000
+    elif 'D' in locals() or 'D' in globals():
+        v = D if 'D' in locals() else globals()['D']
+        p_dia_mm = v if v > 5 else v * 1000
+    else:
+        p_dia_mm = 400
+
+    # แปลงพารามิเตอร์เพื่อใช้เช็กระยะทางเรขาคณิต
+    pile_dia_m = p_dia_mm / 1000.0
+    min_spacing_req = 3.0 * pile_dia_m   # เกณฑ์ระยะห่างเข็ม >= 3.0D
+    min_edge_req = 1.25 * pile_dia_m     # เกณฑ์ระยะขอบ >= 1.25D
     half_w = footing_w / 2
     half_l = footing_l / 2
 
-    # ดึงข้อมูลพิกัดเสาเข็มจากฐานข้อมูล Session State อย่างปลอดภัย
-    pile_source_df = ed if 'ed' in locals() else st.session_state.pile_df
+    # ดึงตารางข้อมูลเสาเข็มอย่างปลอดภัย
+    pile_source_df = ed if 'ed' in locals() or 'ed' in globals() else st.session_state.pile_df
     
     x_design = pile_source_df['X (m)'].values
     y_design = pile_source_df['Y (m)'].values
     
-    # ตรวจสอบคอลัมน์ค่าเยื้องศูนย์ (ถ้าไม่มีให้สมมติเป็น 0)
     dx_cm = pile_source_df['ΔX (cm)'].values if 'ΔX (cm)' in pile_source_df.columns else np.zeros(len(x_design))
     dy_cm = pile_source_df['ΔY (cm)'].values if 'ΔY (cm)' in pile_source_df.columns else np.zeros(len(y_design))
     
@@ -989,7 +1026,7 @@ with tab_vis:
     y_act = y_design + dy_cm / 100.0
     num_piles = len(x_act)
 
-    # 🧭 2. คำนวณตรวจสอบระยะห่างระหว่างเสาเข็มเดี่ยว (Pile-to-Pile Spacing Check)
+    # 🧭 เริ่มการตรวจสอบระยะห่างเสาเข็ม (Pile Spacing Check)
     spacing_passed = True
     spacing_errors = []
     for i in range(num_piles):
@@ -999,7 +1036,7 @@ with tab_vis:
                 spacing_passed = False
                 spacing_errors.append(f"ระยะระหว่างเข็ม **{pile_source_df['ชื่อเข็ม'].values[i]}** ถึง **{pile_source_df['ชื่อเข็ม'].values[j]}** จริงเหลือ {dist:.2f} ม. (ต่ำกว่าเกณฑ์ 3.0D = {min_spacing_req:.2f} ม.)")
 
-    # 🧭 3. คำนวณตรวจสอบระยะขอบฐานรากจริง (Edge Distance Check)
+    # 🧭 เริ่มการตรวจสอบระยะขอบฐานราก (Edge Distance Check)
     edge_passed = True
     edge_errors = []
     pile_colors = []
@@ -1014,16 +1051,16 @@ with tab_vis:
         if min_dist_to_edge < min_edge_req:
             edge_passed = False
             edge_errors.append(f"เข็มต้น **{pile_source_df['ชื่อเข็ม'].values[i]}**: ระยะห่างขอบเหลือ {min_dist_to_edge:.2f} ม. (ต่ำกว่าเกณฑ์ 1.25D = {min_edge_req:.2f} ม.)")
-            pile_colors.append('#ef4444') # เปลี่ยนเป็นสีแดงเตือนภัยถ้าเสาเข็มตอกชิดขอบเกินไป
+            pile_colors.append('#ef4444') # สีแดงเตือนภัย
         else:
-            pile_colors.append('#3b82f6') # สีน้ำเงินสว่างสภาวะปกติ
+            pile_colors.append('#3b82f6') # สีน้ำเงินปกติ
 
-    # 📢 4. แสดงกล่องสถานะแจ้งเตือนผลการตรวจสอบระยะเหนือแบบแปลน
+    # 📢 แสดงผลสรุปการตรวจสอบระยะบนหน้าจอ
     st.markdown("### 🔍 ผลการตรวจสอบระยะทางเรขาคณิตหน้างาน")
     col_chk1, col_chk2 = st.columns(2)
     with col_chk1:
         if spacing_passed:
-            st.success(f"✅ **ระยะห่างระหว่างเสาเข็ม (Pile Spacing):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 3.0D = {min_spacing_req:.2f}$ ม.)")
+            st.success(f"✅ **ระยะห่างระหว่างเสาเข็ม:** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 3.0D = {min_spacing_req:.2f}$ ม.)")
         else:
             st.error("❌ **ระยะห่างระหว่างเสาเข็ม:** ต่ำกว่าเกณฑ์มาตรฐานวิศวกรรม!")
             for err in spacing_errors:
@@ -1031,43 +1068,41 @@ with tab_vis:
                 
     with col_chk2:
         if edge_passed:
-            st.success(f"✅ **ระยะขอบฐานราก (Edge Distance):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 1.25D = {min_edge_req:.2f}$ ม.)")
+            st.success(f"✅ **ระยะขอบฐานราก:** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 1.25D = {min_edge_req:.2f}$ ม.)")
         else:
             st.error("❌ **ระยะขอบฐานราก:** ไม่ผ่านเกณฑ์! เสาเข็มหนีศูนย์ออกไปชิดขอบเกินไป")
             for err in edge_errors:
                 st.caption(err)
 
-    # 🎨 5. การวาดแบบแปลนสเกลจริงด้วย Matplotlib
+    # 🎨 วาดภาพแปลนวิศวกรรมด้วย Matplotlib
     fig, ax = plt.subplots(figsize=(7, 7))
     
-    # วาดคอนกรีตฐานราก (Footing Boundary)
+    # วาดคอนกรีตฐานราก
     ftg_rect = patches.Rectangle((-half_w, -half_l), footing_w, footing_l, linewidth=2, edgecolor='#334155', facecolor='#f1f5f9', zorder=1)
     ax.add_patch(ftg_rect)
     
-    # วาดตำแหน่งเสาตอม่อ (Column Cross-section)
-    col_rect = patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.5, edgecolor='#b91c1c', facecolor='#fee2e2', hatched='/', zorder=2)
+    # วาดตำแหน่งเสาตอม่อ
+    col_rect = patches.Rectangle((-cx_val/2, -cy_val/2), cx_val, cy_val, linewidth=1.5, edgecolor='#b91c1c', facecolor='#fee2e2', hatched='/', zorder=2)
     ax.add_patch(col_rect)
     ax.text(0, 0, 'Column', color='#b91c1c', fontsize=9, ha='center', va='center', weight='bold', zorder=3)
     
-    # วาดสัญลักษณ์และการเคลื่อนตัวเยื้องศูนย์ของเสาเข็ม
+    # วาดเข็มออกแบบ vs เข็มตอกจริง
     for i in range(num_piles):
-        # วาดพิกัดตามแบบดั้งเดิม (วงกลมเส้นประ สีเทา)
+        # เข็มตามแบบ (เส้นประ)
         dp = patches.Circle((x_design[i], y_design[i]), pile_dia_m/2, linewidth=1.2, edgecolor='#94a3b8', linestyle='--', facecolor='none', alpha=0.7, label='Design Location' if i==0 else "")
         ax.add_patch(dp)
         
-        # วาดพิกัดหน้างานจริง (วงกลมเส้นทึบ สีน้ำเงิน/หรือแดงตามสถานะขอบ)
+        # เข็มจริงหน้างาน (เส้นทึบ)
         ap = patches.Circle((x_act[i], y_act[i]), pile_dia_m/2, linewidth=2, edgecolor=pile_colors[i], facecolor='none', zorder=4, label='As-built (Actual)' if i==0 else "")
         ax.add_patch(ap)
         
-        # ลากเส้นเวกเตอร์สีแดงสดแสดงการหนีศูนย์ (Deviation Vector) จากจุดเดิมไปจุดใหม่
+        # เส้นเวกเตอร์บอกทิศทางการเบี้ยวศูนย์
         if x_design[i] != x_act[i] or y_design[i] != y_act[i]:
             ax.plot([x_design[i], x_act[i]], [y_design[i], y_act[i]], color='#dc2626', linestyle='-', linewidth=2, zorder=5)
-            ax.scatter(x_act[i], y_act[i], color='#dc2626', s=20, zorder=6) # มาร์กจุดพิกัดจริง
+            ax.scatter(x_act[i], y_act[i], color='#dc2626', s=20, zorder=6)
             
-        # แสดงชื่อเสาเข็มกำกับเหนือหัวเข็ม
         ax.text(x_act[i], y_act[i] + (pile_dia_m * 0.6), f"{pile_source_df['ชื่อเข็ม'].values[i]}", color='#0f172a', fontsize=9, weight='bold', ha='center', zorder=7)
 
-    # ตั้งค่าขอบเขตพิกัดและการแสดงผล Grid หน้าจอ
     ax.set_xlabel("แกน X (เมตร)", fontsize=10)
     ax.set_ylabel("แกน Y (เมตร)", fontsize=10)
     ax.set_xlim(-half_w - 0.5, half_w + 0.5)
@@ -1078,25 +1113,15 @@ with tab_vis:
     plt.title("Pile Cap Deviation Layout (Design vs As-built Vectors)", fontsize=11, weight='bold')
     st.pyplot(fig)
 
-    # 🎯 6. สรุปคำแนะนำเชิงวิศวกรรมเรื่องขนาดฐานราก (Resize Decision Matrix)
+    # 🎯 สรุปคำแนะนำส่งท้าย
     st.divider()
-    st.subheader("💡 บทสรุปเชิงวิศวกรรม: ขนาดฐานรากต้องแก้ไขเพิ่มมั้ย?")
+    st.subheader("💡 บทสรุปเชิงวิศวกรรม")
     
-    # ดึงค่าแรงกดสูงสุดของเสาเข็มมาเช็กความปลอดภัยร่วมด้วย (ป้องกันกรณีเกิด Moment ส่วนเพิ่ม)
     max_ru = max(p_ult_out) if 'p_ult_out' in locals() or 'p_ult_out' in globals() else 0
     p_cap = pile_cap if 'pile_cap' in locals() or 'pile_cap' in globals() else 99999
     overloaded = max_ru > p_cap
 
     if edge_passed and spacing_passed and not overloaded:
-        st.success("✨ **บทสรุป:** **ไม่ต้องเพิ่มขนาดฐานราก** รูปทรงและมิติเดิมมีความกว้างและเนื้อคอนกรีตโอบล้อมเพียงพอที่จะยอมรับการเยื้องศูนย์ของเสาเข็มกลุ่มนี้ได้อย่างปลอดภัยตามข้อกำหนด ACI 318-19")
+        st.success("✨ **บทสรุป:** **ไม่ต้องเพิ่มขนาดฐานราก** ขนาดและระยะคอนกรีตโอบล้อมรอบหัวเข็มในปัจจุบันยังปลอดภัยดีอยู่ครับ")
     else:
-        st.warning("⚠️ **บทสรุป: แนะนำให้ดำเนินการปรับปรุง / ขยายขนาดฐานราก เนื่องจากพบปัญหาดังต่อไปนี้:**")
-        
-        if not edge_passed:
-            st.write("- **ต้องขยายขนาดฐานราก (ขยายขอบออกด้านที่เข็มหนีศูนย์):** เพื่อชดเชยระยะห่างจากขอบ (Edge Distance) ให้กลับมาหนาแน่นได้เกณฑ์มาตรฐาน $> 1.25D$ ช่วยป้องกันการวิบัติจากการแตกร้าวริมขอบคอนกรีต (Edge Spalling)")
-        
-        if overloaded:
-            st.write(f"- **ต้องเพิ่มความหนาฐานราก (t) หรือปรับขนาดเพื่อลดแรงบิด:** เนื่องจากแรงเยื้องศูนย์ทำให้เกิด Eccentric Moment เพิ่มขึ้น ส่งผลให้แรงปฏิกิริยาประลัยสูงสุดลงเสาเข็ม ($R_u = {max_ru:.2f}$ ton) พุ่งสูงเกินกว่าพิกัดกำลังปลอดภัยที่ยอมรับได้ (${p_cap:.2f}$ ton)")
-            
-        if not spacing_passed:
-            st.write("- **ข้อควรระวังเรื่องพฤติกรรมกลุ่มเข็ม:** ระยะห่างเสาเข็มจริงหน้างานชิดกันเกินไป ($< 3.0D$) ควรปรึกษาวิศวกรฐานรากเพื่อประเมินประสิทธิภาพการลดกำลังรับน้ำหนักดิน (Group Pile Efficiency Factor)")
+        st.warning("⚠️ **บทสรุป: แนะนำให้ขยายหรือปรับปรุงขนาดฐานราก เนื่องจากพบปัญหาเรขาคณิตตัวอย่างข้างต้น**")
