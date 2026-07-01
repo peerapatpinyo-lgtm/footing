@@ -949,28 +949,47 @@ with tab_calc:
 # ==============================================================================
 # TAB 3: ADVANCED ENGINEERING VISUALS (DESIGN VS AS-BUILT VECTORS & CHECKS)
 # ==============================================================================
+# ==============================================================================
+# TAB 3: ADVANCED ENGINEERING VISUALS (DESIGN VS AS-BUILT VECTORS & CHECKS)
+# ==============================================================================
 with tab_vis:
     st.markdown("## 📐 แบบขยายรายละเอียดวิศวกรรม (Engineering Visuals Layout)")
     st.markdown("แผนภาพแสดงความเปรียบเทียบระหว่าง **พิกัดตามแบบสั่งการ (Design)** และ **พิกัดที่ตอกจริงเยื้องศูนย์หน้างาน (As-built)**")
 
-    # 🛠️ FIX NAMEERROR: กำหนดขนาดเส้นผ่านศูนย์กลางเสาเข็มตรงนี้ (หน่วยเป็น มิลลิเมตร)
-    # คุณสามารถเปลี่ยนเลข 400 เป็นขนาดเสาเข็มจริงของคุณได้เลยครับ (เช่น 300, 400, 500)
-    pile_dia_mm = 400 
+    # 🔍 1. ระบบค้นหาตัวแปรขนาดเสาเข็มอัตโนมัติ เพื่อป้องกัน NameError
+    if 'pile_dia_mm' in locals() or 'pile_dia_mm' in globals():
+        p_dia_mm = pile_dia_mm
+    elif 'pile_dia' in locals() or 'pile_dia' in globals():
+        p_dia_mm = pile_dia if pile_dia > 5 else pile_dia * 1000
+    elif 'D' in locals() or 'D' in globals():
+        p_dia_mm = D if D > 5 else D * 1000
+    else:
+        # หากไม่พบตัวแปรจากส่วนอื่น ระบบจะสร้างช่องอินพุตให้ระบุขนาดได้โดยตรงที่แท็บนี้
+        p_dia_mm = st.number_input("ระบุขนาดเส้นผ่านศูนย์กลางเสาเข็ม D (mm)", min_value=150, max_value=1200, value=400, step=50, key="vis_tab_pile_dia")
 
-    # 1. เตรียมพารามิเตอร์เชิงเรขาคณิตสำหรับตรวจสอบ
-    pile_dia_m = pile_dia_mm / 1000.0
+    # แปลงหน่วยเป็นเมตรสำหรับใช้คำนวณระยะเรขาคณิต
+    pile_dia_m = p_dia_mm / 1000.0
     min_spacing_req = 3.0 * pile_dia_m   # เกณฑ์มาตรฐานระยะห่างระหว่างเข็ม >= 3.0D
     min_edge_req = 1.25 * pile_dia_m     # เกณฑ์มาตรฐานระยะขอบฐานราก >= 1.25D
+    
     half_w = footing_w / 2
     half_l = footing_l / 2
 
-    x_design = ed['X (m)'].values
-    y_design = ed['Y (m)'].values
-    x_act = x_design + ed['ΔX (cm)'].values / 100.0
-    y_act = y_design + ed['ΔY (cm)'].values / 100.0
+    # ดึงข้อมูลพิกัดเสาเข็มจากฐานข้อมูล Session State อย่างปลอดภัย
+    pile_source_df = ed if 'ed' in locals() else st.session_state.pile_df
+    
+    x_design = pile_source_df['X (m)'].values
+    y_design = pile_source_df['Y (m)'].values
+    
+    # ตรวจสอบคอลัมน์ค่าเยื้องศูนย์ (ถ้าไม่มีให้สมมติเป็น 0)
+    dx_cm = pile_source_df['ΔX (cm)'].values if 'ΔX (cm)' in pile_source_df.columns else np.zeros(len(x_design))
+    dy_cm = pile_source_df['ΔY (cm)'].values if 'ΔY (cm)' in pile_source_df.columns else np.zeros(len(y_design))
+    
+    x_act = x_design + dx_cm / 100.0
+    y_act = y_design + dy_cm / 100.0
     num_piles = len(x_act)
 
-    # 2. คำนวณตรวจสอบระยะห่างระหว่างเสาเข็มเดี่ยว (Pile-to-Pile Spacing Check)
+    # 🧭 2. คำนวณตรวจสอบระยะห่างระหว่างเสาเข็มเดี่ยว (Pile-to-Pile Spacing Check)
     spacing_passed = True
     spacing_errors = []
     for i in range(num_piles):
@@ -978,9 +997,9 @@ with tab_vis:
             dist = math.sqrt((x_act[i] - x_act[j])**2 + (y_act[i] - y_act[j])**2)
             if dist < min_spacing_req:
                 spacing_passed = False
-                spacing_errors.append(f"ระยะระหว่างเข็ม **{ed['ชื่อเข็ม'].values[i]}** ถึง **{ed['ชื่อเข็ม'].values[j]}** จริงเหลือ {dist:.2f} ม. (ต่ำกว่าเกณฑ์ 3.0D = {min_spacing_req:.2f} ม.)")
+                spacing_errors.append(f"ระยะระหว่างเข็ม **{pile_source_df['ชื่อเข็ม'].values[i]}** ถึง **{pile_source_df['ชื่อเข็ม'].values[j]}** จริงเหลือ {dist:.2f} ม. (ต่ำกว่าเกณฑ์ 3.0D = {min_spacing_req:.2f} ม.)")
 
-    # 3. คำนวณตรวจสอบระยะขอบฐานรากจริง (Edge Distance Check)
+    # 🧭 3. คำนวณตรวจสอบระยะขอบฐานรากจริง (Edge Distance Check)
     edge_passed = True
     edge_errors = []
     pile_colors = []
@@ -994,16 +1013,17 @@ with tab_vis:
         
         if min_dist_to_edge < min_edge_req:
             edge_passed = False
-            edge_errors.append(f"เข็มต้น **{ed['ชื่อเข็ม'].values[i]}**: ระยะห่างขอบเหลือ {min_dist_to_edge:.2f} ม. (ต่ำกว่าเกณฑ์ 1.25D = {min_edge_req:.2f} ม.)")
-            pile_colors.append('#ef4444') # เปลี่ยนเป็นสีแดงเตือนภัยถ้าชิดขอบเกินไป
+            edge_errors.append(f"เข็มต้น **{pile_source_df['ชื่อเข็ม'].values[i]}**: ระยะห่างขอบเหลือ {min_dist_to_edge:.2f} ม. (ต่ำกว่าเกณฑ์ 1.25D = {min_edge_req:.2f} ม.)")
+            pile_colors.append('#ef4444') # เปลี่ยนเป็นสีแดงเตือนภัยถ้าเสาเข็มตอกชิดขอบเกินไป
         else:
-            pile_colors.append('#3b82f6') # สีน้ำเงินปกติ
+            pile_colors.append('#3b82f6') # สีน้ำเงินสว่างสภาวะปกติ
 
-    # 4. แสดงกล่องสถานะแจ้งเตือนผลการตรวจสอบระยะเหนือแบบแปลน
+    # 📢 4. แสดงกล่องสถานะแจ้งเตือนผลการตรวจสอบระยะเหนือแบบแปลน
+    st.markdown("### 🔍 ผลการตรวจสอบระยะทางเรขาคณิตหน้างาน")
     col_chk1, col_chk2 = st.columns(2)
     with col_chk1:
         if spacing_passed:
-            st.success("✅ **ระยะห่างระหว่างเสาเข็ม (Pile Spacing):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 3.0D$)")
+            st.success(f"✅ **ระยะห่างระหว่างเสาเข็ม (Pile Spacing):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 3.0D = {min_spacing_req:.2f}$ ม.)")
         else:
             st.error("❌ **ระยะห่างระหว่างเสาเข็ม:** ต่ำกว่าเกณฑ์มาตรฐานวิศวกรรม!")
             for err in spacing_errors:
@@ -1011,13 +1031,13 @@ with tab_vis:
                 
     with col_chk2:
         if edge_passed:
-            st.success("✅ **ระยะขอบฐานราก (Edge Distance):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 1.25D$)")
+            st.success(f"✅ **ระยะขอบฐานราก (Edge Distance):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 1.25D = {min_edge_req:.2f}$ ม.)")
         else:
             st.error("❌ **ระยะขอบฐานราก:** ไม่ผ่านเกณฑ์! เสาเข็มหนีศูนย์ออกไปชิดขอบเกินไป")
             for err in edge_errors:
                 st.caption(err)
 
-    # 5. การวาดแบบแปลนสเกลจริงด้วย Matplotlib
+    # 🎨 5. การวาดแบบแปลนสเกลจริงด้วย Matplotlib
     fig, ax = plt.subplots(figsize=(7, 7))
     
     # วาดคอนกรีตฐานราก (Footing Boundary)
@@ -1031,7 +1051,7 @@ with tab_vis:
     
     # วาดสัญลักษณ์และการเคลื่อนตัวเยื้องศูนย์ของเสาเข็ม
     for i in range(num_piles):
-        # วาดพิกัดตามแบบ (วงกลมเส้นประ สีเทา)
+        # วาดพิกัดตามแบบดั้งเดิม (วงกลมเส้นประ สีเทา)
         dp = patches.Circle((x_design[i], y_design[i]), pile_dia_m/2, linewidth=1.2, edgecolor='#94a3b8', linestyle='--', facecolor='none', alpha=0.7, label='Design Location' if i==0 else "")
         ax.add_patch(dp)
         
@@ -1045,7 +1065,7 @@ with tab_vis:
             ax.scatter(x_act[i], y_act[i], color='#dc2626', s=20, zorder=6) # มาร์กจุดพิกัดจริง
             
         # แสดงชื่อเสาเข็มกำกับเหนือหัวเข็ม
-        ax.text(x_act[i], y_act[i] + (pile_dia_m * 0.6), f"{ed['ชื่อเข็ม'].values[i]}", color='#0f172a', fontsize=9, weight='bold', ha='center', zorder=7)
+        ax.text(x_act[i], y_act[i] + (pile_dia_m * 0.6), f"{pile_source_df['ชื่อเข็ม'].values[i]}", color='#0f172a', fontsize=9, weight='bold', ha='center', zorder=7)
 
     # ตั้งค่าขอบเขตพิกัดและการแสดงผล Grid หน้าจอ
     ax.set_xlabel("แกน X (เมตร)", fontsize=10)
@@ -1058,24 +1078,25 @@ with tab_vis:
     plt.title("Pile Cap Deviation Layout (Design vs As-built Vectors)", fontsize=11, weight='bold')
     st.pyplot(fig)
 
-    # 6. สรุปคำแนะนำเชิงวิศวกรรมเรื่องขนาดฐานราก (Resize Decision Matrix)
+    # 🎯 6. สรุปคำแนะนำเชิงวิศวกรรมเรื่องขนาดฐานราก (Resize Decision Matrix)
     st.divider()
-    st.subheader("🎯 สรุปความจำเป็นในการปรับขนาดฐานราก (Footing Resize Evaluation)")
+    st.subheader("💡 บทสรุปเชิงวิศวกรรม: ขนาดฐานรากต้องแก้ไขเพิ่มมั้ย?")
     
     # ดึงค่าแรงกดสูงสุดของเสาเข็มมาเช็กความปลอดภัยร่วมด้วย (ป้องกันกรณีเกิด Moment ส่วนเพิ่ม)
     max_ru = max(p_ult_out) if 'p_ult_out' in locals() or 'p_ult_out' in globals() else 0
-    overloaded = max_ru > pile_cap if 'pile_cap' in locals() or 'pile_cap' in globals() else False
+    p_cap = pile_cap if 'pile_cap' in locals() or 'pile_cap' in globals() else 99999
+    overloaded = max_ru > p_cap
 
     if edge_passed and spacing_passed and not overloaded:
-        st.success("💡 **บทสรุป:** **ไม่ต้องเพิ่มขนาดฐานราก** มิติโครงสร้างในปัจจุบันยังมีเนื้อคอนกรีตโอบล้อมและระยะปลอดภัยเพียงพอที่จะรองรับพิกัดเสาเข็มเยื้องศูนย์ชุดนี้ได้อย่างปลอดภัย")
+        st.success("✨ **บทสรุป:** **ไม่ต้องเพิ่มขนาดฐานราก** รูปทรงและมิติเดิมมีความกว้างและเนื้อคอนกรีตโอบล้อมเพียงพอที่จะยอมรับการเยื้องศูนย์ของเสาเข็มกลุ่มนี้ได้อย่างปลอดภัยตามข้อกำหนด ACI 318-19")
     else:
-        st.warning("⚠️ **บทสรุป: แนะนำให้ดำเนินการปรับปรุง/ขยายขนาดฐานราก เนื่องจากพบปัญหาดังต่อไปนี้:**")
+        st.warning("⚠️ **บทสรุป: แนะนำให้ดำเนินการปรับปรุง / ขยายขนาดฐานราก เนื่องจากพบปัญหาดังต่อไปนี้:**")
         
         if not edge_passed:
-            st.write("- **ต้องขยายขนาดฐานราก (ขยายขอบออกไปด้านที่มีปัญหา):** เพื่อเพิ่มระยะห่างจากขอบ (Edge Distance) ให้กลับมาได้ตามเกณฑ์มาตรฐาน $> 1.25D$ เพื่อป้องกันพฤติกรรมการวิบัติแบบคอนกรีตกะเทาะหลุดรอบขอบหัวเข็ม (Edge Spalling)")
+            st.write("- **ต้องขยายขนาดฐานราก (ขยายขอบออกด้านที่เข็มหนีศูนย์):** เพื่อชดเชยระยะห่างจากขอบ (Edge Distance) ให้กลับมาหนาแน่นได้เกณฑ์มาตรฐาน $> 1.25D$ ช่วยป้องกันการวิบัติจากการแตกร้าวริมขอบคอนกรีต (Edge Spalling)")
         
         if overloaded:
-            st.write(f"- **ต้องเพิ่มความหนา (t) หรือ ขยายฐานรากเพื่อลดโมเมนต์ดัด:** เนื่องจากแรงหนีศูนย์ทำให้เกิดแรงบิดเยื้องศูนย์กลางส่วนเพิ่ม ดึงให้แรงปฏิกิริยาประลัยสูงสุดของเข็ม ($R_u = {max_ru:.2f}$ ton) เกินกำลังแบกทานปลอดภัยที่ออกแบบไว้ (${pile_cap:.2f}$ ton)")
+            st.write(f"- **ต้องเพิ่มความหนาฐานราก (t) หรือปรับขนาดเพื่อลดแรงบิด:** เนื่องจากแรงเยื้องศูนย์ทำให้เกิด Eccentric Moment เพิ่มขึ้น ส่งผลให้แรงปฏิกิริยาประลัยสูงสุดลงเสาเข็ม ($R_u = {max_ru:.2f}$ ton) พุ่งสูงเกินกว่าพิกัดกำลังปลอดภัยที่ยอมรับได้ (${p_cap:.2f}$ ton)")
             
         if not spacing_passed:
-            st.write("- **ข้อควรระวังหน้างานเพิ่มเติม:** ระยะห่างเสาเข็มจริงหน้างานชิดกันเกินไป ($< 3.0D$) ควรปรึกษาวิศวกรปฐพีกลศาสตร์ (Geotechnical Engineer) เพื่อพิจารณาตัวคูณลดกำลังรับน้ำหนักเนื่องจากผลกระทบกลุ่มเข็ม (Group Pile Efficiency)")
+            st.write("- **ข้อควรระวังเรื่องพฤติกรรมกลุ่มเข็ม:** ระยะห่างเสาเข็มจริงหน้างานชิดกันเกินไป ($< 3.0D$) ควรปรึกษาวิศวกรฐานรากเพื่อประเมินประสิทธิภาพการลดกำลังรับน้ำหนักดิน (Group Pile Efficiency Factor)")
