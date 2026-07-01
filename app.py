@@ -941,6 +941,38 @@ with tab_calc:
     st.divider()
 
     # =========================================================
+    # 3.1 การพิสูจน์สูตรจากสมดุลโมเมนต์ (PiRi = MR Formulation)
+    # =========================================================
+    st.markdown("---")
+    st.markdown("### 3.1 การพิสูจน์สูตรแรงปฏิกิริยาจากสมดุลโมเมนต์ ($\sum P_i r_i = M_R$)")
+    st.markdown("พิจารณาพฤติกรรมของฐานรากแข็งเกร็งรับโมเมนต์ดัดดั้งเดิม โดยกำหนดให้พิกัดอ้างอิงเริ่มต้นที่จุดศูนย์ถ่วง (C.G.) ของกลุ่มเสาเข็ม")
+    
+    st.markdown("**ขั้นที่ 1: สมมติฐานพฤติกรรมเชิงเส้น (Kinematic Assumption)**")
+    st.markdown("เนื่องจากฐานรากมีความแข็งเกร็งสมบูรณ์ (Rigid Cap) ระยะทรุดตัวหรือแรงต้านในเสาเข็มต้นที่ $i$ ($P_i$) จะแปรผันเป็นเส้นตรงตามระยะห่างจากจุดศูนย์ถ่วง ($r_i$)")
+    st.latex(r"P_i \propto r_i \quad \implies \quad P_i = k \cdot r_i")
+    st.markdown("เมื่อ $k$ คือค่าคงที่สัดส่วนความลาดชันของแรง (Proportionality Constant)")
+
+    st.markdown("**ขั้นที่ 2: สมการสมดุลโมเมนต์ลัพธ์ (Moment Equilibrium)**")
+    st.markdown("โมเมนต์ต้านทานภายในที่เกิดจากแรงในเสาเข็มทุกต้นรวมกัน จะต้องมีค่าเท่ากับโมเมนต์ลัพธ์ภายนอก ($M_R$) ที่มากระทำพอดี:")
+    st.latex(r"\sum_{i=1}^{n} (P_i \cdot r_i) = M_R")
+    st.markdown("นี่คือสมการสมดุลหลักในรูปแบบ $\sum P_i r_i = M_R$")
+
+    st.markdown("**ขั้นที่ 3: แทนค่าเพื่อหาค่าคงที่ $k$ (Substitution & Solving for $k$)**")
+    st.markdown("แทนค่า $P_i = k \cdot r_i$ ลงในสมการสมดุลโมเมนต์ด้านบน:")
+    st.latex(r"\sum_{i=1}^{n} (k \cdot r_i \cdot r_i) = M_R")
+    st.latex(r"k \sum_{i=1}^{n} r_i^2 = M_R \quad \implies \quad k = \frac{M_R}{\sum_{i=1}^{n} r_i^2}")
+
+    st.markdown("**ขั้นที่ 4: สมการสำเร็จรูปสำหรับแรงในเสาเข็ม (Final Formula for Pile Force)**")
+    st.markdown("นำค่าคงที่ $k$ ที่คำนวณได้ ย้อนกลับไปแทนในสมมติฐานเริ่มต้น ($P_i = k \cdot r_i$) จะได้สูตรการกระจายแรงเนื่องจากโมเมนต์ดัด:")
+    st.latex(r"P_i = \left( \frac{M_R}{\sum r_i^2} \right) \cdot r_i = \frac{M_R \cdot r_i}{\sum r_i^2}")
+
+    st.markdown("**ขั้นที่ 5: การขยายผลเข้าสู่ระบบพิกัดฉาก 2 แกน (Extension to 2D Cartesian Coordinates)**")
+    st.markdown("เมื่อแยกพิจารณาในระบบพิกัดฉาก $x$ และ $y$ ระยะห่างกำลังสองจะกลายเป็น $r_i^2 = x_i^2 + y_i^2$ ทำให้ได้สมการที่ใช้ในงานวิศวกรรมจริง:")
+    st.latex(r"P_{i, \text{due to } M_x} = \frac{M_x \cdot y_i}{\sum y_i^2}, \quad P_{i, \text{due to } M_y} = \frac{M_y \cdot x_i}{\sum x_i^2}")
+    
+    st.markdown("เมื่อนำไปรวมกับแรงกดในแนวดิ่งสม่ำเสมอจากน้ำหนักบรรทุกรวม ($\Sigma P_u / n$) จะได้สมการรวมอันเป็นที่สุด:")
+    st.latex(r"R_i = \frac{\Sigma P_u}{n} \pm \frac{M_x \cdot y_i}{\sum y_i^2} \pm \frac{M_y \cdot x_i}{\sum x_i^2}")
+    # =========================================================
     # 4. Pile Reactions Calculation
     # =========================================================
     st.markdown("### 4. การคำนวณแรงปฏิกิริยาเสาเข็มรายต้น (Pile Reactions Validation)")
