@@ -864,13 +864,24 @@ with tab_calc:
     st.latex(rf"d = t - \frac{{\max(\text{{Cover}}, \text{{Embed}})}}{{100}} - \frac{{d_b}}{{2000}}")
     st.latex(rf"d = {t_actual:.3f} - \frac{{\max({cover_cm:.1f}, {embed_cm:.1f})}}{{100}} - \frac{{{bar_dia}}}{{2000}} = {d_actual:.3f}\text{{ m}}")
 
-    # 2. Loads
-    st.markdown("### 2. น้ำหนักบรรทุกประลัย (Factored Loads)")
+    # 2. Loads & Pile C.G.
+    st.markdown("### 2. ศูนย์ถ่วงกลุ่มเสาเข็ม (Pile Group C.G.) และน้ำหนักบรรทุกประลัย")
+    
+    # เพิ่มการแสดงสมการหา C.G. เสาเข็ม
+    sum_x = sum(p[0] for p in piles_act)
+    sum_y = sum(p[1] for p in piles_act)
+    st.markdown("**หาจุดศูนย์ถ่วงกลุ่มเสาเข็ม (เทียบกับจุดกำเนิดพิกัด):**")
+    st.latex(r"C.G._x = \frac{\sum x_i}{n},\quad C.G._y = \frac{\sum y_i}{n}")
+    st.latex(rf"C.G._x = \frac{{{sum_x:.3f}}}{{{n_piles}}} = {cgx:.3f}\text{{ m}}")
+    st.latex(rf"C.G._y = \frac{{{sum_y:.3f}}}{{{n_piles}}} = {cgy:.3f}\text{{ m}}")
+    st.latex(rf"\text{{ระยะเยื้องศูนย์: }} e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
+    
+    # น้ำหนักบรรทุกประลัย
+    st.markdown("**น้ำหนักบรรทุกประลัย (Factored Loads):**")
     st.latex(rf"P_{{ult}} = {fac_dl}(DL) + {fac_ll}(LL) = {fac_dl}({DL}) + {fac_ll}({LL}) = {P_ult:.2f}\text{{ ton}}")
     st.latex(rf"W_{{ftg}} = 1.2 \times (A \times t \times \gamma_c) = 1.2 \times ({area:.2f} \times {t_actual:.3f} \times 2.4) = {wu_ftg:.2f}\text{{ ton}}")
     st.latex(rf"W_{{soil}} = 1.2 \times (A_{{soil}} \times D_{{soil}} \times \gamma_s) = 1.2 \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
     st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = {P_ult:.2f} + {wu_ftg:.2f} + {wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
-    st.latex(rf"e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
 
     # 3. Plate rigidity
     st.markdown("### 3. แผ่นพื้นยืดหยุ่น (Flexural Rigidity) และโมเมนต์ดัด")
