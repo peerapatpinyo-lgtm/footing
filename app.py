@@ -895,7 +895,42 @@ with tab_calc:
     st.latex(rf"W_{{ftg}} = 1.2 \times (A \times t \times \gamma_c) = 1.2 \times ({area:.2f} \times {t_actual:.3f} \times 2.4) = {wu_ftg:.2f}\text{{ ton}}")
     st.latex(rf"W_{{soil}} = 1.2 \times (A_{{soil}} \times D_{{soil}} \times \gamma_s) = 1.2 \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
     st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = {P_ult:.2f} + {wu_ftg:.2f} + {wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
+    # ---------------------------------------------------------
+    # แทรกโค้ดนี้เพื่อแสดงการพิสูจน์สูตรในรูปแบบเวกเตอร์-เมทริกซ์
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 2.2 การพิสูจน์สมการแรงปฏิกิริยาเสาเข็มด้วยเวกเตอร์ (Rigid Cap Formulation)")
+    st.markdown("สมมติฐาน: ฐานรากมีความแข็งเกร็งสมบูรณ์ (Rigid Body) ไม่มีการดัดงอ และเสาเข็มทุกต้นมีค่าความขัดแข็งสปริง (Axial Stiffness, $k$) เท่ากัน")
 
+    st.markdown("**1. เวกเตอร์ตำแหน่งและการกระจัด (Kinematics)**")
+    st.markdown("ให้จุดกำเนิดอยู่ที่จุดศูนย์ถ่วง (C.G.) ของกลุ่มเสาเข็ม ระยะทรุดตัวของเสาเข็มต้นที่ $i$ เกิดจากการทรุดตัวในแนวดิ่งบวกกับการหมุนรอบแกน:")
+    st.latex(r"\text{เวกเตอร์ตำแหน่ง: } \vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix}")
+    st.latex(r"\text{เวกเตอร์การหมุน: } \vec{\theta} = \begin{bmatrix} \theta_y \\ \theta_x \end{bmatrix}, \quad \text{การทรุดตัวแนวดิ่ง: } \Delta_z")
+    st.latex(r"\text{ระยะทรุดตัวเสาเข็มที่ } i : \delta_i = \Delta_z + \vec{\theta} \cdot \vec{r}_i = \Delta_z + \theta_y x_i + \theta_x y_i")
+
+    st.markdown("**2. สมการแรง-การกระจัด (Constitutive Law)**")
+    st.latex(r"R_i = k \cdot \delta_i = k (\Delta_z + \theta_y x_i + \theta_x y_i)")
+
+    st.markdown("**3. สมการสมดุลแนวดิ่ง (Vertical Equilibrium)**")
+    st.latex(r"\sum_{i=1}^{n} R_i = P_{ult} \Rightarrow \sum_{i=1}^{n} k(\Delta_z + \theta_y x_i + \theta_x y_i) = P_{ult}")
+    st.markdown("เนื่องจากจุดกำเนิดอยู่ที่ C.G. ดังนั้น $\sum x_i = 0$ และ $\sum y_i = 0$ พจน์การหมุนจึงหายไป:")
+    st.latex(r"n \cdot k \cdot \Delta_z = P_{ult} \Rightarrow \Delta_z = \frac{P_{ult}}{n \cdot k}")
+
+    st.markdown("**4. สมการสมดุลโมเมนต์ (Moment Equilibrium Matrix)**")
+    st.markdown("โมเมนต์รอบแกน C.G. เกิดจากผลรวมของแรงเสาเข็มคูณระยะทาง:")
+    st.latex(r"\vec{M}_{cg} = \begin{bmatrix} M_y \\ M_x \end{bmatrix} = \sum_{i=1}^{n} R_i \vec{r}_i = \sum_{i=1}^{n} k (\Delta_z + \theta_y x_i + \theta_x y_i) \begin{bmatrix} x_i \\ y_i \end{bmatrix}")
+    st.markdown("ดึงตัวร่วมและจัดรูปให้อยู่ในรูปเมทริกซ์ความเฉื่อย (Inertia Matrix, $\mathbf{J}$):")
+    st.latex(r"\begin{bmatrix} M_y \\ M_x \end{bmatrix} = k \begin{bmatrix} \sum x_i^2 & \sum x_i y_i \\ \sum x_i y_i & \sum y_i^2 \end{bmatrix} \begin{bmatrix} \theta_y \\ \theta_x \end{bmatrix} = k \mathbf{J} \vec{\theta}")
+    
+    st.markdown("หากจัดกลุ่มเสาเข็มแบบสมมาตร ผลคูณข้าม $\sum x_i y_i = 0$ จะสามารถแก้สมการหา $\vec{\theta}$ ได้ดังนี้:")
+    st.latex(r"\theta_y = \frac{M_y}{k \sum x_i^2}, \quad \theta_x = \frac{M_x}{k \sum y_i^2}")
+
+    st.markdown("**5. บทสรุปสมการ (Final General Equation)**")
+    st.markdown("นำ $\Delta_z, \theta_y, \theta_x$ แทนกลับลงในสมการ $R_i = k \cdot \delta_i$ (สังเกตว่าค่า $k$ จะตัดกันไปเอง):")
+    st.latex(r"R_i = \frac{P_{ult}}{n} + \frac{M_y}{\sum x_i^2}x_i + \frac{M_x}{\sum y_i^2}y_i")
+    st.latex(r"\text{หรือเขียนในรูปเวกเตอร์: } R_i = \frac{P_{ult}}{n} + \vec{M}_{cg}^T \mathbf{J}^{-1} \vec{r}_i")
+    st.info("💡 **ข้อสังเกต:** สมการนี้ครอบคลุมแม้ในกรณีที่กลุ่มเสาเข็มไม่สมมาตร ($\sum xy \neq 0$) โดยใช้ Inverse ของเมทริกซ์ $\mathbf{J}$ เข้ามาจัดการได้โดยตรงเลยครับ")
+    # ---------------------------------------------------------
     # ---------------------------------------------------------
     # แทรกโค้ดนี้ต่อจากหัวข้อ "2. Loads" ใน with tab_calc:
     # ---------------------------------------------------------
