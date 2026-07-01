@@ -896,6 +896,53 @@ with tab_calc:
     st.latex(rf"W_{{soil}} = 1.2 \times (A_{{soil}} \times D_{{soil}} \times \gamma_s) = 1.2 \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
     st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = {P_ult:.2f} + {wu_ftg:.2f} + {wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
 
+    # ---------------------------------------------------------
+    # แทรกโค้ดนี้ต่อจากหัวข้อ "2. Loads" ใน with tab_calc:
+    # ---------------------------------------------------------
+    st.markdown("### 2.1 แรงปฏิกิริยาเสาเข็มแต่ละต้น (Pile Reactions - Rigid Cap Method)")
+    st.markdown("คำนวณตรวจสอบด้วยสมมติฐานฐานรากแข็งเกร็ง (Rigid Pile Cap) สำหรับใช้ตรวจสอบค่าเบื้องต้นกับวิธี FDM:")
+    
+    # คำนวณโมเมนต์ลัพธ์รอบจุด C.G. ของกลุ่มเสาเข็ม
+    Mx_tot = Mu_cx + P_u_tot * (-ecc_y)
+    My_tot = Mu_cy + P_u_tot * (-ecc_x)
+    
+    # แสดงสมการหลัก
+    st.latex(r"R_i = \frac{\Sigma P_u}{n} \pm \frac{M_{x,cg} \cdot y_i}{\sum y^2} \pm \frac{M_{y,cg} \cdot x_i}{\sum x^2}")
+    
+    # แสดงค่าโมเมนต์และ I
+    st.markdown("**โมเมนต์ลัพธ์รอบจุดศูนย์ถ่วง (C.G.):**")
+    st.latex(rf"M_{{x,cg}} = M_{{ux}} + \Sigma P_u(-e_y) = {Mu_cx:.2f} + ({P_u_tot:.2f})({-ecc_y:.3f}) = {Mx_tot:.2f}\text{{ ton-m}}")
+    st.latex(rf"M_{{y,cg}} = M_{{uy}} + \Sigma P_u(-e_x) = {Mu_cy:.2f} + ({P_u_tot:.2f})({-ecc_x:.3f}) = {My_tot:.2f}\text{{ ton-m}}")
+    
+    st.markdown("**ผลรวมกำลังสองของระยะเสาเข็ม (เทียบกับจุด C.G.):**")
+    st.latex(rf"\sum x^2 = I_{{yy}} = {Iyy_grp:.3f}\text{{ m}}^2, \quad \sum y^2 = I_{{xx}} = {Ixx_grp:.3f}\text{{ m}}^2")
+    
+    st.markdown("**แทนค่าหาแรงปฏิกิริยาเสาเข็มแต่ละต้น ($R_i$):**")
+    
+    # ลูปเพื่อแสดงการแทนค่าเสาเข็มทุกต้น
+    for i, (px, py) in enumerate(piles_act):
+        rx = px - cgx  # ระยะ x เทียบกับ CG
+        ry = py - cgy  # ระยะ y เทียบกับ CG
+        
+        # คำนวณแต่ละพจน์
+        term_P = P_u_tot / n_piles
+        term_Mx = (Mx_tot * ry) / Ixx_grp
+        term_My = (My_tot * rx) / Iyy_grp
+        R_rigid = term_P + term_Mx + term_My
+        R_fdm = p_ult_out[i] # ค่าจาก FDM ที่โปรแกรมหลักคำนวณไว้
+        
+        # จัด Format เครื่องหมาย + - ให้สวยงาม
+        sign_Mx = "+" if term_Mx >= 0 else "-"
+        sign_My = "+" if term_My >= 0 else "-"
+        
+        # แสดงสมการบรรทัดแรก: รูปแบบตัวแปร
+        st.latex(rf"R_{{{i+1}}} = \frac{{{P_u_tot:.2f}}}{{{n_piles}}} + \frac{{({Mx_tot:.2f})({ry:.3f})}}{{{Ixx_grp:.3f}}} + \frac{{({My_tot:.2f})({rx:.3f})}}{{{Iyy_grp:.3f}}}")
+        # แสดงสมการบรรทัดสอง: ผลลัพธ์ (เปรียบเทียบกับ FDM)
+        st.latex(rf"R_{{{i+1}}} = {term_P:.2f} {sign_Mx} {abs(term_Mx):.2f} {sign_My} {abs(term_My):.2f} = \mathbf{{{R_rigid:.2f}\text{{ ton}}}} \quad \color{{gray}}{{\text{{(FDM = {R_fdm:.2f} ton)}}}}")
+    
+    st.info("💡 **หมายเหตุ:** ค่า FDM (สีเทา) คือค่าที่วิเคราะห์รวมผลจากการแอ่นตัวของแผ่นพื้นฐานราก (Flexibility) และสปริงดินแล้ว ซึ่งโปรแกรมจะนำค่า FDM นี้ไปใช้ออกแบบในขั้นตอนต่อไป")
+    # ---------------------------------------------------------
+    
     # 3. Plate rigidity
     st.markdown("### 3. แผ่นพื้นยืดหยุ่น (Flexural Rigidity) และโมเมนต์ดัด")
     fc_mpa  = fc * 0.0980665
