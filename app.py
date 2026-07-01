@@ -812,82 +812,99 @@ with tab_rep:
         st.dataframe(df_r, hide_index=True, use_container_width=True)
 
 with tab_calc:
-    st.markdown("## 📄 รายงานการคำนวณ — ACI 318-19 (MKS)")
-    st.markdown("**เครื่องมือวิเคราะห์:** Winkler Flexible Plate FDM + Wood-Armer")
+    st.markdown("## 📄 รายการคำนวณแบบละเอียด — ACI 318-19 (MKS Units)")
+    st.markdown("**เครื่องมือวิเคราะห์:** Winkler Flexible Plate (FDM) & Wood-Armer Method")
     st.divider()
 
-    # 1. Parameters
-    st.markdown("### 1. พารามิเตอร์ & ความลึกประสิทธิผล")
-    st.latex(rf"d = t - \max(cover, embed)/100 - d_b/2 "
-             rf"= {t_actual:.3f} - {max(cover_cm,embed_cm)/100:.4f} - {bar_dia/2000:.4f} = {d_actual:.3f}\text{{ m}}")
+    # 1. Properties
+    st.markdown("### 1. ข้อมูลพารามิเตอร์และความลึกประสิทธิผล (Effective Depth)")
+    st.latex(rf"f'_c = {fc}\text{{ ksc}},\quad f_y = {fy}\text{{ ksc}}")
+    st.latex(rf"t = {t_actual:.3f}\text{{ m}},\quad \text{{Cover}} = {cover_cm:.1f}\text{{ cm}},\quad \text{{Embed}} = {embed_cm:.1f}\text{{ cm}},\quad d_b = {bar_dia}\text{{ mm}}")
+    st.latex(rf"d = t - \frac{{\max(\text{{Cover}}, \text{{Embed}})}}{{100}} - \frac{{d_b}}{{2000}}")
+    st.latex(rf"d = {t_actual:.3f} - \frac{{\max({cover_cm:.1f}, {embed_cm:.1f})}}{{100}} - \frac{{{bar_dia}}}{{2000}} = {d_actual:.3f}\text{{ m}}")
 
-    # 2. Factored loads
-    st.markdown("### 2. น้ำหนักบรรทุกประลัย")
-    st.latex(rf"P_{{ult}} = {fac_dl}({DL}) + {fac_ll}({LL}) = {P_ult:.2f}\text{{ ton}}")
-    st.latex(rf"W_{{ftg}} = {fac_dl}({area:.2f} \times {t_actual:.2f} \times 2.4) = {wu_ftg:.2f}\text{{ ton}}")
-    st.latex(rf"W_{{soil}} = {fac_dl} \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
-    st.latex(rf"\Sigma P_{{u}} = {P_ult:.2f}+{wu_ftg:.2f}+{wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
-    st.latex(rf"e_x={ecc_x:.3f}\text{{ m}},\; e_y={ecc_y:.3f}\text{{ m}}")
+    # 2. Loads
+    st.markdown("### 2. น้ำหนักบรรทุกประลัย (Factored Loads)")
+    st.latex(rf"P_{{ult}} = {fac_dl}(DL) + {fac_ll}(LL) = {fac_dl}({DL}) + {fac_ll}({LL}) = {P_ult:.2f}\text{{ ton}}")
+    st.latex(rf"W_{{ftg}} = 1.2 \times (A \times t \times \gamma_c) = 1.2 \times ({area:.2f} \times {t_actual:.3f} \times 2.4) = {wu_ftg:.2f}\text{{ ton}}")
+    st.latex(rf"W_{{soil}} = 1.2 \times (A_{{soil}} \times D_{{soil}} \times \gamma_s) = 1.2 \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
+    st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = {P_ult:.2f} + {wu_ftg:.2f} + {wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
+    st.latex(rf"e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
 
     # 3. Plate rigidity
-    fc_mpa  = fc*0.0980665
-    Ec_rep  = 4700*math.sqrt(fc_mpa)*101.9716
-    D_rep   = Ec_rep*t_actual**3/(12*(1-0.15**2))
-    st.markdown("### 3. แผ่นพื้นยืดหยุ่น (Flexural Rigidity)")
-    st.latex(rf"D = \frac{{E_c t^3}}{{12(1-\nu^2)}} = \frac{{{Ec_rep:,.0f}\times{t_actual:.2f}^3}}{{12(1-0.15^2)}} = {D_rep:,.2f}\text{{ ton·m}}")
-    st.markdown("**Wood-Armer (ไม่หารด้วย 1000 — หน่วย ton·m/m):**")
-    st.latex(r"M_x^* = |M_x| + |M_{xy}|,\quad M_y^* = |M_y| + |M_{xy}|")
-    st.latex(rf"M_{{x}}^* = {Mxs:.4f}\text{{ t·m/m}},\quad M_{{y}}^* = {Mys:.4f}\text{{ t·m/m}}")
+    st.markdown("### 3. แผ่นพื้นยืดหยุ่น (Flexural Rigidity) และโมเมนต์ดัด")
+    fc_mpa  = fc * 0.0980665
+    Ec_rep  = 4700 * math.sqrt(fc_mpa) * 101.9716
+    D_rep   = Ec_rep * (t_actual**3) / (12 * (1 - 0.15**2))
+    st.latex(rf"E_c = 4700\sqrt{{f'_c\text{{(MPa)}}}} = 4700\sqrt{{{fc_mpa:.2f}}} = {Ec_rep:,.0f}\text{{ ton/m}}^2")
+    st.latex(rf"D = \frac{{E_c t^3}}{{12(1-\nu^2)}} = \frac{{{Ec_rep:,.0f} \times {t_actual:.3f}^3}}{{12(1-0.15^2)}} = {D_rep:,.2f}\text{{ ton·m}}")
+    st.markdown("**Wood-Armer Moments (คำนวณรวมผลจาก Mxy เพื่อหาโมเมนต์ออกแบบ):**")
+    st.latex(rf"M_{{ux}}^* = |M_x| + |M_{{xy}}| = {Mxs:.4f}\text{{ ton·m/m}}")
+    st.latex(rf"M_{{uy}}^* = |M_y| + |M_{{xy}}| = {Mys:.4f}\text{{ ton·m/m}}")
 
     # 4. Shear
-    st.markdown("### 4. การตรวจสอบแรงเฉือน")
-    b0c = 2*((cx+d_actual)+(cy+d_actual))
-    beta = max(cx,cy)/max(min(cx,cy),0.001)
-    alpha_s = 40 if col_pos=="Interior" else (30 if col_pos=="Edge" else 20)
-    vc1 = 0.53*(1+2/beta)*math.sqrt(fc)
-    vc2 = 0.27*(alpha_s*(d_actual*100)/(b0c*100)+2)*math.sqrt(fc)
-    vc3 = 1.06*math.sqrt(fc)
-    st.markdown("**4.1 Punching (ตอม่อ)**")
-    st.latex(rf"b_{{0}} = 2((c_x+d)+(c_y+d)) = {b0c:.3f}\text{{ m}}")
-    st.latex(rf"v_c = \min({vc1:.3f},\;{vc2:.3f},\;{vc3:.3f})\times\phi = {phivc_col:.3f}\text{{ ksc}}")
-    st.latex(rf"v_{{u}} = {vu_col:.4f}\text{{ ksc}} \le {phivc_col:.4f}\text{{ ksc}} \rightarrow \textbf{{{'SAFE' if vu_col<=phivc_col else 'FAIL'}}}")
-    st.markdown("**4.2 Punching (เสาเข็ม)**")
-    st.latex(rf"\phi v_c = {phivc_pile:.3f}\text{{ ksc}}")
-    st.latex(rf"v_{{u,pile}} = {vu_pile:.4f}\text{{ ksc}} \rightarrow \textbf{{{'SAFE' if vu_pile<=phivc_pile else 'FAIL'}}}")
-    st.markdown("**4.3 Wide-Beam Shear**")
-    st.latex(rf"\phi v_c = 0.75\times0.53\sqrt{{{fc}}} = {phivc_wb:.3f}\text{{ ksc}}")
-    st.latex(rf"v_{{u,wb}} = {vu_wb:.4f}\text{{ ksc}} \rightarrow \textbf{{{'SAFE' if vu_wb<=phivc_wb else 'FAIL'}}}")
+    st.markdown("### 4. การตรวจสอบแรงเฉือน (Shear Checks)")
+    b0c = 2 * ((cx + d_actual) + (cy + d_actual))
+    beta = max(cx, cy) / max(min(cx, cy), 0.001)
+    alpha_s = 40 if col_pos == "Interior" else (30 if col_pos == "Edge" else 20)
+    vc1 = 0.53 * (1 + 2/beta) * math.sqrt(fc)
+    vc2 = 0.27 * (alpha_s * (d_actual * 100) / (b0c * 100) + 2) * math.sqrt(fc)
+    vc3 = 1.06 * math.sqrt(fc)
+
+    st.markdown("#### 4.1 Punching Shear รอบเสาตอม่อ (Two-way Shear)")
+    st.latex(rf"b_0 = 2((c_x + d) + (c_y + d)) = 2(({cx:.3f} + {d_actual:.3f}) + ({cy:.3f} + {d_actual:.3f})) = {b0c:.3f}\text{{ m}}")
+    st.latex(rf"v_{{c1}} = 0.53\left(1 + \frac{{2}}{{\beta}}\right)\sqrt{{f'_c}} = 0.53\left(1 + \frac{{2}}{{{beta:.2f}}}\right)\sqrt{{{fc}}} = {vc1:.3f}\text{{ ksc}}")
+    st.latex(rf"v_{{c2}} = 0.27\left(\frac{{\alpha_s d}}{{b_0}} + 2\right)\sqrt{{f'_c}} = 0.27\left(\frac{{{alpha_s} \times {d_actual:.3f}}}{{{b0c:.3f}}} + 2\right)\sqrt{{{fc}}} = {vc2:.3f}\text{{ ksc}}")
+    st.latex(rf"v_{{c3}} = 1.06\sqrt{{f'_c}} = 1.06\sqrt{{{fc}}} = {vc3:.3f}\text{{ ksc}}")
+    st.latex(rf"\phi v_c = \phi \cdot \min(v_{{c1}}, v_{{c2}}, v_{{c3}}) = 0.75 \times \min({vc1:.2f}, {vc2:.2f}, {vc3:.2f}) = {phivc_col:.3f}\text{{ ksc}}")
+    st.latex(rf"v_{{u}} = {vu_col:.4f}\text{{ ksc}} \le \phi v_c ({phivc_col:.3f}\text{{ ksc}}) \rightarrow \textbf{{{'SAFE' if vu_col<=phivc_col else 'FAIL'}}}")
+
+    st.markdown("#### 4.2 Punching Shear รอบหัวเสาเข็ม")
+    st.latex(rf"\phi v_{{c,pile}} = 0.75 \times 1.06\sqrt{{f'_c}} = 0.75 \times 1.06\sqrt{{{fc}}} = {phivc_pile:.3f}\text{{ ksc}}")
+    st.latex(rf"v_{{u,pile(max)}} = {vu_pile:.4f}\text{{ ksc}} \le {phivc_pile:.3f}\text{{ ksc}} \rightarrow \textbf{{{'SAFE' if vu_pile<=phivc_pile else 'FAIL'}}}")
+
+    st.markdown("#### 4.3 Wide-Beam Shear (One-way Shear)")
+    st.latex(rf"\phi v_{{c,wb}} = 0.75 \times 0.53\sqrt{{f'_c}} = 0.75 \times 0.53\sqrt{{{fc}}} = {phivc_wb:.3f}\text{{ ksc}}")
+    st.latex(rf"v_{{u,wb}} = {vu_wb:.4f}\text{{ ksc}} \le {phivc_wb:.3f}\text{{ ksc}} \rightarrow \textbf{{{'SAFE' if vu_wb<=phivc_wb else 'FAIL'}}}")
 
     # 5. Rebar
-    st.markdown("### 5. การออกแบบเหล็กเสริม")
-    rho_min = max(0.8*math.sqrt(fc)/fy, 14.0/fy)
-    st.latex(rf"\rho_{{min}} = \max\!\left(\frac{{0.8\sqrt{{{fc}}}}}{{{fy}}}, \frac{{14}}{{{fy}}}\right) = {rho_min:.5f}")
-    Rn_x = Mxs*1e5/(phi_f*100*d_actual**2*10000) if d_actual > 0 else 0
-    st.latex(rf"R_{{nx}} = \frac{{M_x^* \times 10^5}}{{\phi b d^2}} = {Rn_x:.4f}\text{{ ksc}}")
-    st.latex(rf"A_{{s,req(X)}} = {Asrx:.2f}\text{{ cm}}^2\text{{/m}} \rightarrow \textbf{{{nbx}\text{{-DB}}{bar_dia}\;@\;{spx:.0f}\text{{ cm}}}}")
-    st.latex(rf"A_{{s,req(Y)}} = {Asry:.2f}\text{{ cm}}^2\text{{/m}} \rightarrow \textbf{{{nby}\text{{-DB}}{bar_dia}\;@\;{spy:.0f}\text{{ cm}}}}")
+    st.markdown("### 5. การออกแบบปริมาณเหล็กเสริม (Flexural Reinforcement)")
+    rho_min = max(0.8 * math.sqrt(fc) / fy, 14.0 / fy)
+    st.latex(rf"\rho_{{min}} = \max\left(\frac{{0.8\sqrt{{{fc}}}}}{{{fy}}}, \frac{{14}}{{{fy}}}\right) = {rho_min:.5f}")
+    
+    Rn_x = (Mxs * 1e5) / (phi_f * 100 * (d_actual * 100)**2) if d_actual > 0 else 0
+    Rn_y = (Mys * 1e5) / (phi_f * 100 * (d_actual * 100)**2) if d_actual > 0 else 0
+    
+    st.latex(rf"R_{{nx}} = \frac{{M_{{ux}}^*}}{{\phi b d^2}} = \frac{{{Mxs:.4f} \times 10^5}}{{{phi_f} \times 100 \times {d_actual*100:.1f}^2}} = {Rn_x:.4f}\text{{ ksc}}")
+    st.latex(rf"A_{{s,req(X)}} = {Asrx:.2f}\text{{ cm}}^2\text{{/m}} \rightarrow \text{{ใช้ }} \textbf{{{nbx}\text{{-DB}}{bar_dia}\;@\;{spx:.0f}\text{{ cm}}}} \quad (A_{{s,prov}} = {nbx*ab:.2f}\text{{ cm}}^2\text{{/m}})")
+    
+    st.latex(rf"R_{{ny}} = \frac{{M_{{uy}}^*}}{{\phi b d^2}} = \frac{{{Mys:.4f} \times 10^5}}{{{phi_f} \times 100 \times {d_actual*100:.1f}^2}} = {Rn_y:.4f}\text{{ ksc}}")
+    st.latex(rf"A_{{s,req(Y)}} = {Asry:.2f}\text{{ cm}}^2\text{{/m}} \rightarrow \text{{ใช้ }} \textbf{{{nby}\text{{-DB}}{bar_dia}\;@\;{spy:.0f}\text{{ cm}}}} \quad (A_{{s,prov}} = {nby*ab:.2f}\text{{ cm}}^2\text{{/m}})")
 
-    # 6. Development length (ACI 318-19 §25.5.2.1)
-    st.markdown("### 6. Development Length  (ACI 318-19 §25.5.2.1)")
+    # 6. Development length
+    st.markdown("### 6. ระยะฝังยึดเหนี่ยวเหล็กเสริม (Development Length, ACI 318-19 §25.5.2.1)")
     psi_s = 0.8 if bar_dia <= 19 else 1.0
-    st.latex(rf"L_d = \frac{{3}}{{40\sqrt{{10.2}}}} \cdot \frac{{\psi_s}}{{(c_b+K_{{tr}})/d_b}} \cdot \frac{{f_y}}{{\sqrt{{f'_c}}}} \cdot d_b"
-             rf"\;\ge 30\text{{ cm}}")
-    st.latex(rf"L_d = {ld_req:.1f}\text{{ cm}}")
-    for dr,av in [("X",avail_x),("Y",avail_y)]:
+    st.latex(rf"L_d = \left( \frac{{3}}{{40\sqrt{{10.2}}}} \right) \left( \frac{{\psi_s}}{{\frac{{c_b+K_{{tr}}}}{{d_b}}}} \right) \left( \frac{{f_y}}{{\sqrt{{f'_c}}}} \right) d_b \ge 30\text{{ cm}}")
+    st.latex(rf"L_d = \left( 0.0235 \right) \left( \frac{{{psi_s}}}{{2.5}} \right) \left( \frac{{{fy}}}{{\sqrt{{{fc}}}}} \right) \left( \frac{{{bar_dia}}}{{10}} \right) = {ld_req:.1f}\text{{ cm}}")
+    for dr, av in [("X", avail_x), ("Y", avail_y)]:
         ok = av >= ld_req
-        st.latex(rf"\text{{avail}}_{{{dr}}} = {av:.1f}\text{{ cm}} "
-                 rf"{r'\ge' if ok else r'<'} {ld_req:.1f} \rightarrow "
-                 rf"\textbf{{{'OK' if ok else 'Hook Required'}}}")
+        st.latex(rf"L_{{avail({dr})}} = {av:.1f}\text{{ cm}} \quad {'\ge' if ok else '<'} \quad {ld_req:.1f}\text{{ cm}} \rightarrow \textbf{{{'OK' if ok else 'Hook Required'}}}")
 
     # 7. Crack width
-    st.markdown("### 7. การควบคุมรอยร้าว  (Gergely-Lutz)")
-    As_x = nbx*ab
-    fs_gl = min((Ms_xfdm*1e5)/(max(As_x,0.01)*0.85*(d_actual*100))*0.0981, 240.0)
-    dc_mm = cover_cm*10+bar_dia/2; s_mm = spx*10; A_eff = 2*dc_mm*s_mm
-    st.latex(rf"f_s = {fs_gl:.2f}\text{{ MPa}},\quad d_c = {dc_mm:.1f}\text{{ mm}},\quad A_{{eff}} = 2d_c s = {A_eff:.0f}\text{{ mm}}^2")
-    st.latex(rf"w = 11\times10^{{-6}}\times1.2\times{fs_gl:.2f}\times(d_c\cdot A_{{eff}})^{{1/3}} = {w_crack:.4f}\text{{ mm}}"
-             rf"\;\le\;{w_allow}\text{{ mm}} \rightarrow \textbf{{{'PASSED' if w_crack<=w_allow else 'EXCEEDED'}}}")
-
+    st.markdown("### 7. การตรวจสอบรอยร้าว (Crack Control, Gergely-Lutz)")
+    As_x = nbx * ab
+    fs_gl = min((Ms_xfdm * 1e5) / (max(As_x, 0.01) * 0.85 * (d_actual * 100)) * 0.0981, 240.0)
+    dc_mm = cover_cm * 10 + bar_dia / 2
+    s_mm = spx * 10
+    A_eff = 2 * dc_mm * s_mm
+    
+    st.latex(rf"f_s = \frac{{M_s}}{{0.85 \cdot A_s \cdot d}} = {fs_gl:.2f}\text{{ MPa}} \quad (\le 240\text{{ MPa}})")
+    st.latex(rf"d_c = \text{{Cover}} + \frac{{d_b}}{{2}} = {cover_cm*10:.0f} + \frac{{{bar_dia}}}{{2}} = {dc_mm:.1f}\text{{ mm}}")
+    st.latex(rf"A_{{eff}} = 2 \cdot d_c \cdot s = 2 \cdot {dc_mm:.1f} \cdot {s_mm:.0f} = {A_eff:.0f}\text{{ mm}}^2")
+    st.latex(rf"w = 11 \times 10^{{-6}} \cdot \beta \cdot f_s \cdot \sqrt[3]{{d_c \cdot A_{{eff}}}}")
+    st.latex(rf"w = 11 \times 10^{{-6}} \cdot 1.2 \cdot {fs_gl:.2f} \cdot \sqrt[3]{{{dc_mm:.1f} \cdot {A_eff:.0f}}} = {w_crack:.4f}\text{{ mm}}")
+    st.latex(rf"w \le w_{{allow}} ({w_allow}\text{{ mm}}) \rightarrow \textbf{{{'PASSED' if w_crack<=w_allow else 'EXCEEDED'}}}")
+    
 with tab_vis:
     v1,v2 = st.columns(2)
     with v1:
