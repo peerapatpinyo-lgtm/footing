@@ -946,17 +946,132 @@ with tab_calc:
     st.latex(rf"w = 11 \times 10^{{-6}} \cdot 1.2 \cdot {fs_gl:.2f} \cdot \sqrt[3]{{{dc_mm:.1f} \cdot {A_eff:.0f}}} = {w_crack:.4f}\text{{ mm}}")
     st.latex(rf"w \le w_{{allow}} ({w_allow}\text{{ mm}}) \rightarrow \textbf{{{'PASSED' if w_crack<=w_allow else 'EXCEEDED'}}}")
     
+# ==============================================================================
+# TAB 3: ADVANCED ENGINEERING VISUALS (DESIGN VS AS-BUILT VECTORS & CHECKS)
+# ==============================================================================
 with tab_vis:
-    v1,v2 = st.columns(2)
-    with v1:
-        st.markdown("#### As-Built Plan")
-        f2d = fig_plan(verts,cx,cy,piles_act,pile_shape,pile_dia,pile_dia,cols_list,cgx,cgy)
-        st.pyplot(f2d); plt.close(f2d)
-    with v2:
-        st.markdown("#### Section Detail")
-        if top_steel: st.info("💡 Top steel activated")
-        fsec = fig_section(t_actual,B_vis,cover_cm,embed_cm,bar_dia,nbx,spx,cx,cy,top_steel)
-        st.pyplot(fsec); plt.close(fsec)
-    st.markdown("#### 3D Model")
-    f3 = fig_3d(tuple(verts),t_actual,cx,cy,tuple(piles_act),pile_shape,pile_dia,pile_dia,embed_cm/100,tuple(cols_list))
-    st.plotly_chart(f3,use_container_width=True)
+    st.markdown("## 📐 แบบขยายรายละเอียดวิศวกรรม (Engineering Visuals Layout)")
+    st.markdown("แผนภาพแสดงความเปรียบเทียบระหว่าง **พิกัดตามแบบสั่งการ (Design)** และ **พิกัดที่ตอกจริงเยื้องศูนย์หน้างาน (As-built)**")
+
+    # 1. เตรียมพารามิเตอร์เชิงเรขาคณิตสำหรับตรวจสอบ
+    pile_dia_m = pile_dia_mm / 1000.0
+    min_spacing_req = 3.0 * pile_dia_m   # เกณฑ์มาตรฐานระยะห่างระหว่างเข็ม >= 3.0D
+    min_edge_req = 1.25 * pile_dia_m     # เกณฑ์มาตรฐานระยะขอบฐานราก >= 1.25D
+    half_w = footing_w / 2
+    half_l = footing_l / 2
+
+    x_design = ed['X (m)'].values
+    y_design = ed['Y (m)'].values
+    x_act = x_design + ed['ΔX (cm)'].values / 100.0
+    y_act = y_design + ed['ΔY (cm)'].values / 100.0
+    num_piles = len(x_act)
+
+    # 2. คำนวณตรวจสอบระยะห่างระหว่างเสาเข็มเดี่ยว (Pile-to-Pile Spacing Check)
+    spacing_passed = True
+    spacing_errors = []
+    for i in range(num_piles):
+        for j in range(i + 1, num_piles):
+            dist = math.sqrt((x_act[i] - x_act[j])**2 + (y_act[i] - y_act[j])**2)
+            if dist < min_spacing_req:
+                spacing_passed = False
+                spacing_errors.append(f"ระยะระหว่างเข็ม **{ed['ชื่อเข็ม'].values[i]}** ถึง **{ed['ชื่อเข็ม'].values[j]}** จริงเหลือ {dist:.2f} ม. (ต่ำกว่าเกณฑ์ 3.0D = {min_spacing_req:.2f} ม.)")
+
+    # 3. คำนวณตรวจสอบระยะขอบฐานรากจริง (Edge Distance Check)
+    edge_passed = True
+    edge_errors = []
+    pile_colors = []
+    
+    for i in range(num_piles):
+        dist_left = x_act[i] - (-half_w)
+        dist_right = half_w - x_act[i]
+        dist_bottom = y_act[i] - (-half_l)
+        dist_top = half_l - y_act[i]
+        min_dist_to_edge = min(dist_left, dist_right, dist_bottom, dist_top)
+        
+        if min_dist_to_edge < min_edge_req:
+            edge_passed = False
+            edge_errors.append(f"เข็มต้น **{ed['ชื่อเข็ม'].values[i]}**: ระยะห่างขอบเหลือ {min_dist_to_edge:.2f} ม. (ต่ำกว่าเกณฑ์ 1.25D = {min_edge_req:.2f} ม.)")
+            pile_colors.append('#ef4444') # เปลี่ยนเป็นสีแดงเตือนภัยถ้าชิดขอบเกินไป
+        else:
+            pile_colors.append('#3b82f6') # สีน้ำเงินปกติ
+
+    # 4. แสดงกล่องสถานะแจ้งเตือนผลการตรวจสอบระยะเหนือแบบแปลน
+    col_chk1, col_chk2 = st.columns(2)
+    with col_chk1:
+        if spacing_passed:
+            st.success("✅ **ระยะห่างระหว่างเสาเข็ม (Pile Spacing):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 3.0D$)")
+        else:
+            st.error("❌ **ระยะห่างระหว่างเสาเข็ม:** ต่ำกว่าเกณฑ์มาตรฐานวิศวกรรม!")
+            for err in spacing_errors:
+                st.caption(err)
+                
+    with col_chk2:
+        if edge_passed:
+            st.success("✅ **ระยะขอบฐานราก (Edge Distance):** ผ่านเกณฑ์ขั้นต่ำทุกต้น ($> 1.25D$)")
+        else:
+            st.error("❌ **ระยะขอบฐานราก:** ไม่ผ่านเกณฑ์! เสาเข็มหนีศูนย์ออกไปชิดขอบเกินไป")
+            for err in edge_errors:
+                st.caption(err)
+
+    # 5. การวาดแบบแปลนสเกลจริงด้วย Matplotlib
+    fig, ax = plt.subplots(figsize=(7, 7))
+    
+    # วาดคอนกรีตฐานราก (Footing Boundary)
+    ftg_rect = patches.Rectangle((-half_w, -half_l), footing_w, footing_l, linewidth=2, edgecolor='#334155', facecolor='#f1f5f9', zorder=1)
+    ax.add_patch(ftg_rect)
+    
+    # วาดตำแหน่งเสาตอม่อ (Column Cross-section)
+    col_rect = patches.Rectangle((-cx/2, -cy/2), cx, cy, linewidth=1.5, edgecolor='#b91c1c', facecolor='#fee2e2', hatched='/', zorder=2)
+    ax.add_patch(col_rect)
+    ax.text(0, 0, 'Column', color='#b91c1c', fontsize=9, ha='center', va='center', weight='bold', zorder=3)
+    
+    # วาดสัญลักษณ์และการเคลื่อนตัวเยื้องศูนย์ของเสาเข็ม
+    for i in range(num_piles):
+        # วาดพิกัดตามแบบ (วงกลมเส้นประ สีเทา)
+        dp = patches.Circle((x_design[i], y_design[i]), pile_dia_m/2, linewidth=1.2, edgecolor='#94a3b8', linestyle='--', facecolor='none', alpha=0.7, label='Design Location' if i==0 else "")
+        ax.add_patch(dp)
+        
+        # วาดพิกัดหน้างานจริง (วงกลมเส้นทึบ สีน้ำเงิน/หรือแดงตามสถานะขอบ)
+        ap = patches.Circle((x_act[i], y_act[i]), pile_dia_m/2, linewidth=2, edgecolor=pile_colors[i], facecolor='none', zorder=4, label='As-built (Actual)' if i==0 else "")
+        ax.add_patch(ap)
+        
+        # ลากเส้นเวกเตอร์สีแดงสดแสดงการหนีศูนย์ (Deviation Vector) จากจุดเดิมไปจุดใหม่
+        if x_design[i] != x_act[i] or y_design[i] != y_act[i]:
+            ax.plot([x_design[i], x_act[i]], [y_design[i], y_act[i]], color='#dc2626', linestyle='-', linewidth=2, zorder=5)
+            ax.scatter(x_act[i], y_act[i], color='#dc2626', s=20, zorder=6) # มาร์กจุดพิกัดจริง
+            
+        # แสดงชื่อเสาเข็มกำกับเหนือหัวเข็ม
+        ax.text(x_act[i], y_act[i] + (pile_dia_m * 0.6), f"{ed['ชื่อเข็ม'].values[i]}", color='#0f172a', fontsize=9, weight='bold', ha='center', zorder=7)
+
+    # ตั้งค่าขอบเขตพิกัดและการแสดงผล Grid หน้าจอ
+    ax.set_xlabel("แกน X (เมตร)", fontsize=10)
+    ax.set_ylabel("แกน Y (เมตร)", fontsize=10)
+    ax.set_xlim(-half_w - 0.5, half_w + 0.5)
+    ax.set_ylim(-half_l - 0.5, half_l + 0.5)
+    ax.grid(True, linestyle=':', alpha=0.5)
+    ax.set_aspect('equal')
+    ax.legend(loc='upper right')
+    plt.title("Pile Cap Deviation Layout (Design vs As-built Vectors)", fontsize=11, weight='bold')
+    st.pyplot(fig)
+
+    # 6. สรุปคำแนะนำเชิงวิศวกรรมเรื่องขนาดฐานราก (Resize Decision Matrix)
+    st.divider()
+    st.subheader("🎯 สรุปความจำเป็นในการปรับขนาดฐานราก (Footing Resize Evaluation)")
+    
+    # ดึงค่าแรงกดสูงสุดของเสาเข็มมาเช็กความปลอดภัยร่วมด้วย (ป้องกันกรณีเกิด Moment ส่วนเพิ่ม)
+    max_ru = max(p_ult_out) if 'p_ult_out' in locals() or 'p_ult_out' in globals() else 0
+    overloaded = max_ru > pile_cap if 'pile_cap' in locals() or 'pile_cap' in globals() else False
+
+    if edge_passed and spacing_passed and not overloaded:
+        st.success("💡 **บทสรุป:** **ไม่ต้องเพิ่มขนาดฐานราก** มิติโครงสร้างในปัจจุบันยังมีเนื้อคอนกรีตโอบล้อมและระยะปลอดภัยเพียงพอที่จะรองรับพิกัดเสาเข็มเยื้องศูนย์ชุดนี้ได้อย่างปลอดภัย")
+    else:
+        st.warning("⚠️ **บทสรุป: แนะนำให้ดำเนินการปรับปรุง/ขยายขนาดฐานราก เนื่องจากพบปัญหาดังต่อไปนี้:**")
+        
+        if not edge_passed:
+            st.write("- **ต้องขยายขนาดฐานราก (ขยายขอบออกไปด้านที่มีปัญหา):** เพื่อเพิ่มระยะห่างจากขอบ (Edge Distance) ให้กลับมาได้ตามเกณฑ์มาตรฐาน $> 1.25D$ เพื่อป้องกันพฤติกรรมการวิบัติแบบคอนกรีตกะเทาะหลุดรอบขอบหัวเข็ม (Edge Spalling)")
+        
+        if overloaded:
+            st.write(f"- **ต้องเพิ่มความหนา (t) หรือ ขยายฐานรากเพื่อลดโมเมนต์ดัด:** เนื่องจากแรงหนีศูนย์ทำให้เกิดแรงบิดเยื้องศูนย์กลางส่วนเพิ่ม ดึงให้แรงปฏิกิริยาประลัยสูงสุดของเข็ม ($R_u = {max_ru:.2f}$ ton) เกินกำลังแบกทานปลอดภัยที่ออกแบบไว้ (${pile_cap:.2f}$ ton)")
+            
+        if not spacing_passed:
+            st.write("- **ข้อควรระวังหน้างานเพิ่มเติม:** ระยะห่างเสาเข็มจริงหน้างานชิดกันเกินไป ($< 3.0D$) ควรปรึกษาวิศวกรปฐพีกลศาสตร์ (Geotechnical Engineer) เพื่อพิจารณาตัวคูณลดกำลังรับน้ำหนักเนื่องจากผลกระทบกลุ่มเข็ม (Group Pile Efficiency)")
