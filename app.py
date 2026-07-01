@@ -774,42 +774,83 @@ tab_rep, tab_calc, tab_vis = st.tabs([
     "🗺️ Engineering Visuals"])
 
 with tab_rep:
+    st.markdown("## 📊 สรุปผลการออกแบบฐานราก (Design Summary)")
+    
+    # แจ้งเตือนเสาเข็มรับแรงถอน
     tension_warn = [f"P{i+1} ({abs(r):.2f}t)" for i,r in enumerate(p_svc_out) if r < -ten_cap]
-    if tension_warn: st.error(f"🚨 เสาเข็มรับแรงถอนเกิน {ten_cap}t: {', '.join(tension_warn)}")
+    if tension_warn: 
+        st.error(f"🚨 เสาเข็มรับแรงถอนเกิน {ten_cap}t: {', '.join(tension_warn)}")
 
-    c1,c2 = st.columns(2)
+    # 1. แถบแสดงข้อมูลหลัก (Top Level Metrics)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("พื้นที่ฐานราก (Area)", f"{area:.2f} m²")
+    m2.metric("ความหนา (t)", f"{t_actual:.2f} m")
+    m3.metric("ความลึกประสิทธิผล (d)", f"{d_actual:.3f} m")
+    m4.metric("น้ำหนักบรรทุกรวม (ΣPu)", f"{P_u_tot:.1f} ton")
+
+    st.divider()
+
+    c1, c2 = st.columns([1.2, 1.0])
+    
     with c1:
-        st.markdown("**Factored Loads & Geometry**")
-        st.write(f"- Area: **{area:.2f}** m² | t: **{t_actual:.2f}** m | d: **{d_actual:.3f}** m")
-        st.write(f"- P_u_total: **{P_u_tot:.2f}** ton  (incl. footing+soil)")
-        st.write(f"- ΣR (FDM): **{R_sum:.2f}** ton  |  gap: **{abs(R_sum-P_u_tot)/P_u_tot*100:.1f}%**")
-        st.markdown("**Flexural Design (Wood-Armer Moments)**")
-        st.write(f"- แกน X  Mux*={Mxs:.3f} t·m/m → **{nbx}-DB{bar_dia} @ {spx:.0f}cm**")
-        st.write(f"- แกน Y  Muy*={Mys:.3f} t·m/m → **{nby}-DB{bar_dia} @ {spy:.0f}cm**")
-        st.markdown("**Crack Width (Gergely-Lutz)**")
-        ok_cr = w_crack <= w_allow
-        st.write(f"- w = **{w_crack:.3f}** mm {'✅' if ok_cr else '❌'} (ขีดจำกัด {w_allow} mm)")
-        st.markdown("**Development Length**")
-        st.write(f"- ต้องการ Ld = **{ld_req:.1f}** cm")
-        for dr,av in [("X",avail_x),("Y",avail_y)]:
-            ok_ld = av >= ld_req
-            st.write(f"  {'✅' if ok_ld else '⚠️ Hook required'} แกน {dr}: มี {av:.1f} cm")
-        st.markdown("**Shear Checks**")
-        for lbl, vu, phivc in [
-            ("Punching (ตอม่อ)", vu_col, phivc_col),
-            ("Punching (เข็ม)",   vu_pile, phivc_pile),
-            ("Wide-Beam",         vu_wb, phivc_wb)]:
+        st.subheader("🛡️ ผลการตรวจสอบกำลังรับน้ำหนัก (Design Checks)")
+        
+        # แรงเฉือน (Shear)
+        st.markdown("#### 1. การรับแรงเฉือน (Shear Capacity)")
+        shear_data = [
+            ("Punching Shear (รอบตอม่อ)", vu_col, phivc_col),
+            ("Punching Shear (รอบเสาเข็ม)", vu_pile, phivc_pile),
+            ("Wide-Beam Shear (เฉือนทางเดียว)", vu_wb, phivc_wb)
+        ]
+        for lbl, vu, phivc in shear_data:
             ok = vu <= phivc
-            st.write(f"- {lbl}: `{vu:.3f}` ≤ `{phivc:.3f}` ksc {'✅' if ok else '❌'}")
+            status = "✅ **PASS**" if ok else "❌ **FAIL**"
+            st.markdown(f"- **{lbl}:** $v_u = {vu:.3f}$ ksc $\\le \\phi v_c = {phivc:.3f}$ ksc {status}")
+
+        # เหล็กเสริม (Flexure)
+        st.markdown("#### 2. เหล็กเสริมรับโมเมนต์ดัด (Flexural Reinforcement)")
+        st.markdown(f"- **แกน X:** $M_{{ux}}^* = {Mxs:.3f}$ t·m/m $\\rightarrow$ **ใช้ {nbx}-DB{bar_dia} @ {spx:.0f} cm**")
+        st.markdown(f"- **แกน Y:** $M_{{uy}}^* = {Mys:.3f}$ t·m/m $\\rightarrow$ **ใช้ {nby}-DB{bar_dia} @ {spy:.0f} cm**")
+
+        # ข้อกำหนดพิเศษ (Serviceability & Detailing)
+        st.markdown("#### 3. ข้อกำหนดพิเศษ (Serviceability & Detailing)")
+        ok_cr = w_crack <= w_allow
+        cr_stat = "✅ **PASS**" if ok_cr else "❌ **EXCEEDED**"
+        st.markdown(f"- **รอยร้าว (Crack Width):** $w = {w_crack:.3f}$ mm $\\le {w_allow}$ mm {cr_stat}")
+        
+        st.markdown(f"- **ระยะฝังยึดเหนี่ยว (Development Length):** ต้องการ $L_d = {ld_req:.1f}$ cm")
+        for dr, av in [("X", avail_x), ("Y", avail_y)]:
+            ok_ld = av >= ld_req
+            ld_stat = "✅ **OK**" if ok_ld else "⚠️ **ต้องงอขอ (Hook Required)**"
+            st.markdown(f"  - ทิศทาง {dr}: มีระยะให้ฝังได้ $= {av:.1f}$ cm $\\rightarrow$ {ld_stat}")
+
     with c2:
+        st.subheader("🎯 แรงปฏิกิริยาเสาเข็ม (Pile Reactions)")
+        
+        # เช็คสมดุลแรง
+        gap_pct = abs(R_sum - P_u_tot) / max(P_u_tot, 0.001) * 100
+        st.info(f"**Equilibrium Check:** ΣR (FDM) = {R_sum:.2f} ton vs $P_{{total}}$ = {P_u_tot:.2f} ton (Gap: {gap_pct:.1f}%)")
+        
+        # ตารางผลลัพธ์เสาเข็ม
         df_r = pd.DataFrame({
-            'เข็ม': ed['ชื่อเข็ม'],
-            'R_u (ton)': [f"{r:.2f}" for r in p_ult_out],
-            'R_s (ton)': [f"{r:.2f}" for r in p_svc_out],
-            'R_u/cap':   [f"{r/pile_cap:.2f}" if pile_cap>0 else "-" for r in p_ult_out],
-            'V_h (ton)': [f"{v:.3f}" for v in h_shear],
+            'เสาเข็ม': ed['ชื่อเข็ม'],
+            'Ru (ton)': [f"{r:.2f}" for r in p_ult_out],
+            'Rs (ton)': [f"{r:.2f}" for r in p_svc_out],
+            'Ru/Cap':   [f"{r/pile_cap:.2f}" if pile_cap>0 else "-" for r in p_ult_out],
+            'V_horiz (ton)': [f"{v:.3f}" for v in h_shear],
         })
         st.dataframe(df_r, hide_index=True, use_container_width=True)
+        
+        # สรุปน้ำหนักลงเข็ม
+        max_ru = max(p_ult_out) if p_ult_out else 0
+        min_ru = min(p_ult_out) if p_ult_out else 0
+        st.markdown(f"**> Ru สูงสุด:** {max_ru:.2f} ton")
+        st.markdown(f"**> Ru ต่ำสุด:** {min_ru:.2f} ton")
+        
+        if max_ru > pile_cap:
+            st.error(f"🚨 เสาเข็มรับน้ำหนักเกินกำลัง (Overloaded)! ({max_ru:.2f} > {pile_cap} ton)")
+        else:
+            st.success("✅ เสาเข็มทุกต้นรับน้ำหนักได้ปลอดภัย")
 
 with tab_calc:
     st.markdown("## 📄 รายการคำนวณแบบละเอียด — ACI 318-19 (MKS Units)")
