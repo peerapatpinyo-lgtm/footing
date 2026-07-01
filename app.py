@@ -867,15 +867,28 @@ with tab_calc:
     # 2. Loads & Pile C.G.
     st.markdown("### 2. ศูนย์ถ่วงกลุ่มเสาเข็ม (Pile Group C.G.) และน้ำหนักบรรทุกประลัย")
     
-    # เพิ่มการแสดงสมการหา C.G. เสาเข็ม
+    # 📌 คำนวณศูนย์ถ่วงเสาเข็มด้วยเวกเตอร์
     sum_x = sum(p[0] for p in piles_act)
     sum_y = sum(p[1] for p in piles_act)
-    st.markdown("**หาจุดศูนย์ถ่วงกลุ่มเสาเข็ม (เทียบกับจุดกำเนิดพิกัด):**")
-    st.latex(r"C.G._x = \frac{\sum x_i}{n},\quad C.G._y = \frac{\sum y_i}{n}")
-    st.latex(rf"C.G._x = \frac{{{sum_x:.3f}}}{{{n_piles}}} = {cgx:.3f}\text{{ m}}")
-    st.latex(rf"C.G._y = \frac{{{sum_y:.3f}}}{{{n_piles}}} = {cgy:.3f}\text{{ m}}")
-    st.latex(rf"\text{{ระยะเยื้องศูนย์: }} e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
     
+    st.markdown("**หาจุดศูนย์ถ่วงกลุ่มเสาเข็มด้วยเวกเตอร์ตำแหน่ง (Position Vectors):**")
+    st.latex(r"\vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix} \quad \text{คือเวกเตอร์ตำแหน่งของเสาเข็มต้นที่ } i")
+    st.latex(r"\vec{R}_{c.g.} = \frac{1}{n} \sum_{i=1}^{n} \vec{r}_i = \frac{1}{n} \left( \vec{r}_1 + \vec{r}_2 + \dots + \vec{r}_n \right)")
+    
+    # สร้าง String ของเวกเตอร์แต่ละต้นแบบไดนามิก
+    if len(piles_act) <= 6:
+        vec_str = " + ".join([f"\\begin{{bmatrix}} {p[0]:.3f} \\\\ {p[1]:.3f} \\end{{bmatrix}}" for p in piles_act])
+    else:
+        # ถ้าเสาเข็มเยอะเกิน 6 ต้น ให้แสดงแค่ 2 ต้นแรก และต้นสุดท้าย เพื่อไม่ให้สมการล้นหน้า
+        vec_str = f"\\begin{{bmatrix}} {piles_act[0][0]:.3f} \\\\ {piles_act[0][1]:.3f} \\end{{bmatrix}} + \\begin{{bmatrix}} {piles_act[1][0]:.3f} \\\\ {piles_act[1][1]:.3f} \\end{{bmatrix}} + \\dots + \\begin{{bmatrix}} {piles_act[-1][0]:.3f} \\\\ {piles_act[-1][1]:.3f} \\end{{bmatrix}}"
+        
+    # แสดงสมการแทนค่า
+    st.latex(rf"\vec{{R}}_{{c.g.}} = \frac{{1}}{{{n_piles}}} \left( {vec_str} \right)")
+    
+    # แสดงผลลัพธ์การบวกเวกเตอร์และการหารสเกลาร์
+    st.latex(rf"\vec{{R}}_{{c.g.}} = \frac{{1}}{{{n_piles}}} \begin{{bmatrix}} {sum_x:.3f} \\\\ {sum_y:.3f} \end{{bmatrix}} = \begin{{bmatrix}} {cgx:.3f} \\\\ {cgy:.3f} \end{{bmatrix}}\text{{ m}}")
+    st.latex(rf"\therefore \text{{ระยะเยื้องศูนย์: }} e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
+
     # น้ำหนักบรรทุกประลัย
     st.markdown("**น้ำหนักบรรทุกประลัย (Factored Loads):**")
     st.latex(rf"P_{{ult}} = {fac_dl}(DL) + {fac_ll}(LL) = {fac_dl}({DL}) + {fac_ll}({LL}) = {P_ult:.2f}\text{{ ton}}")
