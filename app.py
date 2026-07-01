@@ -854,129 +854,131 @@ with tab_rep:
 
 with tab_calc:
     st.markdown("## 📄 รายการคำนวณแบบละเอียด — ACI 318-19 (MKS Units)")
-    st.markdown("**เครื่องมือวิเคราะห์:** Winkler Flexible Plate (FDM) & Wood-Armer Method")
+    st.markdown("**ระเบียบวิธีวิเคราะห์:** Winkler Flexible Plate (FDM) เปรียบเทียบกับ Rigid Pile Cap Method")
     st.divider()
 
+    # =========================================================
     # 1. Properties
-    st.markdown("### 1. ข้อมูลพารามิเตอร์และความลึกประสิทธิผล (Effective Depth)")
-    st.latex(rf"f'_c = {fc}\text{{ ksc}},\quad f_y = {fy}\text{{ ksc}}")
-    st.latex(rf"t = {t_actual:.3f}\text{{ m}},\quad \text{{Cover}} = {cover_cm:.1f}\text{{ cm}},\quad \text{{Embed}} = {embed_cm:.1f}\text{{ cm}},\quad d_b = {bar_dia}\text{{ mm}}")
-    st.latex(rf"d = t - \frac{{\max(\text{{Cover}}, \text{{Embed}})}}{{100}} - \frac{{d_b}}{{2000}}")
-    st.latex(rf"d = {t_actual:.3f} - \frac{{\max({cover_cm:.1f}, {embed_cm:.1f})}}{{100}} - \frac{{{bar_dia}}}{{2000}} = {d_actual:.3f}\text{{ m}}")
-
-    # 2. Loads & Pile C.G.
-    st.markdown("### 2. ศูนย์ถ่วงกลุ่มเสาเข็ม (Pile Group C.G.) และน้ำหนักบรรทุกประลัย")
+    # =========================================================
+    st.markdown("### 1. ข้อมูลคุณสมบัติวัสดุและความลึกประสิทธิผล (Material Properties & Effective Depth)")
     
-    # 📌 คำนวณศูนย์ถ่วงเสาเข็มด้วยเวกเตอร์
+    st.markdown("**กำลังของวัสดุที่ใช้ในการออกแบบ:**")
+    st.latex(rf"f'_c = {fc}\text{{ ksc}},\quad f_y = {fy}\text{{ ksc}}")
+    
+    st.markdown("**มิติและระยะหุ้มคอนกรีต (Geometry & Coverings):**")
+    st.latex(rf"t = {t_actual:.3f}\text{{ m}},\quad \text{{Cover}} = {cover_cm:.1f}\text{{ cm}},\quad \text{{Embed}} = {embed_cm:.1f}\text{{ cm}},\quad d_b = {bar_dia}\text{{ mm}}")
+    
+    st.markdown("**คำนวณหาความลึกประสิทธิผลของฐานราก ($d$):**")
+    st.latex(r"d = t - \frac{\max(\text{Cover}, \text{Embed})}{100} - \frac{d_b}{2000}")
+    st.latex(rf"d = {t_actual:.3f} - \frac{{\max({cover_cm:.1f}, {embed_cm:.1f})}}{{100}} - \frac{{{bar_dia}}}{{2000}} = \mathbf{{{d_actual:.3f}\text{{ m}}}}")
+    st.divider()
+
+    # =========================================================
+    # 2. Pile Group C.G. & Factored Loads
+    # =========================================================
+    st.markdown("### 2. ศูนย์ถ่วงกลุ่มเสาเข็ม และ น้ำหนักบรรทุกประลัย (Pile C.G. & Factored Loads)")
+    
+    # 2.1 หาจุดศูนย์ถ่วงกลุ่มเสาเข็ม (Pile Group C.G.)
+    st.markdown("#### 2.1 การหาจุดศูนย์ถ่วงกลุ่มเสาเข็มด้วยเวกเตอร์ตำแหน่ง (Position Vectors)")
+    st.markdown("นิยามเวกเตอร์ตำแหน่งของเสาเข็มต้นที่ $i$ ใดๆ เทียบกับจุดหมุนอ้างอิง และหาค่าเฉลี่ยเซนทรอยด์:")
+    st.latex(r"\vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix} \quad \text{และ} \quad \vec{{R}}_{{c.g.}} = \frac{1}{n} \sum_{i=1}^{n} \vec{r}_i")
+    
+    # ดึงพิกัดเพื่อแสดงผลเวกเตอร์
     sum_x = sum(p[0] for p in piles_act)
     sum_y = sum(p[1] for p in piles_act)
     
-    st.markdown("**หาจุดศูนย์ถ่วงกลุ่มเสาเข็มด้วยเวกเตอร์ตำแหน่ง (Position Vectors):**")
-    st.latex(r"\vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix} \quad \text{คือเวกเตอร์ตำแหน่งของเสาเข็มต้นที่ } i")
-    st.latex(r"\vec{R}_{c.g.} = \frac{1}{n} \sum_{i=1}^{n} \vec{r}_i = \frac{1}{n} \left( \vec{r}_1 + \vec{r}_2 + \dots + \vec{r}_n \right)")
-    
-    # สร้าง String ของเวกเตอร์แต่ละต้นแบบไดนามิก
     if len(piles_act) <= 6:
         vec_str = " + ".join([f"\\begin{{bmatrix}} {p[0]:.3f} \\\\ {p[1]:.3f} \\end{{bmatrix}}" for p in piles_act])
     else:
-        # ถ้าเสาเข็มเยอะเกิน 6 ต้น ให้แสดงแค่ 2 ต้นแรก และต้นสุดท้าย เพื่อไม่ให้สมการล้นหน้า
         vec_str = f"\\begin{{bmatrix}} {piles_act[0][0]:.3f} \\\\ {piles_act[0][1]:.3f} \\end{{bmatrix}} + \\begin{{bmatrix}} {piles_act[1][0]:.3f} \\\\ {piles_act[1][1]:.3f} \\end{{bmatrix}} + \\dots + \\begin{{bmatrix}} {piles_act[-1][0]:.3f} \\\\ {piles_act[-1][1]:.3f} \\end{{bmatrix}}"
         
-    # แสดงสมการแทนค่า
     st.latex(rf"\vec{{R}}_{{c.g.}} = \frac{{1}}{{{n_piles}}} \left( {vec_str} \right)")
-    
-    # แสดงผลลัพธ์การบวกเวกเตอร์และการหารสเกลาร์
-    st.latex(rf"\vec{{R}}_{{c.g.}} = \frac{{1}}{{{n_piles}}} \begin{{bmatrix}} {sum_x:.3f} \\\\ {sum_y:.3f} \end{{bmatrix}} = \begin{{bmatrix}} {cgx:.3f} \\\\ {cgy:.3f} \end{{bmatrix}}\text{{ m}}")
-    st.latex(rf"\therefore \text{{ระยะเยื้องศูนย์: }} e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
+    st.latex(rf"\vec{{R}}_{{c.g.}} = \frac{{1}}{{{n_piles}}} \begin{{bmatrix}} {sum_x:.3f} \\\\ {sum_y:.3f} \end{{bmatrix}} = \begin{{bmatrix}} \mathbf{{{cgx:.3f}}} \\\\ \mathbf{{{cgy:.3f}}} \end{{bmatrix}}\text{{ m}}")
 
-    # น้ำหนักบรรทุกประลัย
-    st.markdown("**น้ำหนักบรรทุกประลัย (Factored Loads):**")
+    # 2.2 น้ำหนักบรรทุกประลัย (Factored Loads)
+    st.markdown("#### 2.2 น้ำหนักบรรทุกประลัยรวม และระยะเยื้องศูนย์ (Total Factored Loads & Eccentricity)")
+    st.markdown("คำนวณน้ำหนักบรรทุกประลัยจากเสาตอหม้อ น้ำหนักฐานราก และน้ำหนักดินกลบ:")
     st.latex(rf"P_{{ult}} = {fac_dl}(DL) + {fac_ll}(LL) = {fac_dl}({DL}) + {fac_ll}({LL}) = {P_ult:.2f}\text{{ ton}}")
     st.latex(rf"W_{{ftg}} = 1.2 \times (A \times t \times \gamma_c) = 1.2 \times ({area:.2f} \times {t_actual:.3f} \times 2.4) = {wu_ftg:.2f}\text{{ ton}}")
     st.latex(rf"W_{{soil}} = 1.2 \times (A_{{soil}} \times D_{{soil}} \times \gamma_s) = 1.2 \times {W_soil:.2f} = {wu_soil:.2f}\text{{ ton}}")
-    st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = {P_ult:.2f} + {wu_ftg:.2f} + {wu_soil:.2f} = {P_u_tot:.2f}\text{{ ton}}")
-    # ---------------------------------------------------------
-    # แทรกโค้ดนี้เพื่อแสดงการพิสูจน์สูตรในรูปแบบเวกเตอร์-เมทริกซ์
-    # ---------------------------------------------------------
-    st.markdown("---")
-    st.markdown("### 2.2 การพิสูจน์สมการแรงปฏิกิริยาเสาเข็มด้วยเวกเตอร์ (Rigid Cap Formulation)")
-    st.markdown("สมมติฐาน: ฐานรากมีความแข็งเกร็งสมบูรณ์ (Rigid Body) ไม่มีการดัดงอ และเสาเข็มทุกต้นมีค่าความขัดแข็งสปริง (Axial Stiffness, $k$) เท่ากัน")
+    st.latex(rf"\Sigma P_u = P_{{ult}} + W_{{ftg}} + W_{{soil}} = \mathbf{{{P_u_tot:.2f}\text{{ ton}}}}")
+    
+    st.markdown("ระยะเยื้องศูนย์ลัพธ์ของน้ำหนักบรรทุกเทียบกับจุดศูนย์ถ่วงกลุ่มเสาเข็ม:")
+    st.latex(rf"e_x = {ecc_x:.3f}\text{{ m}},\quad e_y = {ecc_y:.3f}\text{{ m}}")
+    st.divider()
 
-    st.markdown("**1. เวกเตอร์ตำแหน่งและการกระจัด (Kinematics)**")
-    st.markdown("ให้จุดกำเนิดอยู่ที่จุดศูนย์ถ่วง (C.G.) ของกลุ่มเสาเข็ม ระยะทรุดตัวของเสาเข็มต้นที่ $i$ เกิดจากการทรุดตัวในแนวดิ่งบวกกับการหมุนรอบแกน:")
-    st.latex(r"\text{เวกเตอร์ตำแหน่ง: } \vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix}")
-    st.latex(r"\text{เวกเตอร์การหมุน: } \vec{\theta} = \begin{bmatrix} \theta_y \\ \theta_x \end{bmatrix}, \quad \text{การทรุดตัวแนวดิ่ง: } \Delta_z")
-    st.latex(r"\text{ระยะทรุดตัวเสาเข็มที่ } i : \delta_i = \Delta_z + \vec{\theta} \cdot \vec{r}_i = \Delta_z + \theta_y x_i + \theta_x y_i")
+    # =========================================================
+    # 3. Vector-Matrix Derivation (Rigid Cap)
+    # =========================================================
+    st.markdown("### 3. การพิสูจน์สมการแรงปฏิกิริยาเสาเข็มด้วยเวกเตอร์ (Rigid Cap Formulation)")
+    st.markdown("**สมมติฐาน:** ฐานรากแข็งเกร็งสมบูรณ์ (Rigid Body) และเสาเข็มทุกต้นมีค่าความขดแข็งสปริงในแนวดิ่ง ($k$) เท่ากัน")
 
-    st.markdown("**2. สมการแรง-การกระจัด (Constitutive Law)**")
+    st.markdown("**ขั้นตอนที่ 1: ความสัมพันธ์ทางคณิตศาสตร์ของการกระจัด (Kinematics)**")
+    st.markdown("ย้ายจุดกำเนิดระบบพิกัดมาที่จุด C.G. ของกลุ่มเสาเข็ม ระยะทรุดตัวของเสาเข็มต้นที่ $i$ ($\delta_i$) จะสัมพันธ์กับการเคลื่อนตัวแนวดิ่ง ($\Delta_z$) และการหมุนรอบแกน ($\vec{\theta}$):")
+    st.latex(r"\text{เวกเตอร์ตำแหน่งเทียบ C.G.: } \vec{r}_i = \begin{bmatrix} x_i \\ y_i \end{bmatrix}, \quad \text{เวกเตอร์การหมุน: } \vec{\theta} = \begin{bmatrix} \theta_y \\ \theta_x \end{bmatrix}")
+    st.latex(r"\text{ระยะทรุดตัวเสาเข็ม: } \delta_i = \Delta_z + \vec{\theta} \cdot \vec{r}_i = \Delta_z + \theta_y x_i + \theta_x y_i")
+
+    st.markdown("**ขั้นตอนที่ 2: ความสัมพันธ์ระหว่างแรงและการกระจัด (Constitutive Law)**")
     st.latex(r"R_i = k \cdot \delta_i = k (\Delta_z + \theta_y x_i + \theta_x y_i)")
 
-    st.markdown("**3. สมการสมดุลแนวดิ่ง (Vertical Equilibrium)**")
-    st.latex(r"\sum_{i=1}^{n} R_i = P_{ult} \Rightarrow \sum_{i=1}^{n} k(\Delta_z + \theta_y x_i + \theta_x y_i) = P_{ult}")
-    st.markdown("เนื่องจากจุดกำเนิดอยู่ที่ C.G. ดังนั้น $\sum x_i = 0$ และ $\sum y_i = 0$ พจน์การหมุนจึงหายไป:")
-    st.latex(r"n \cdot k \cdot \Delta_z = P_{ult} \Rightarrow \Delta_z = \frac{P_{ult}}{n \cdot k}")
+    st.markdown("**ขั้นตอนที่ 3: สมการสมดุลแรงในแนวดิ่ง (Vertical Equilibrium)**")
+    st.latex(r"\sum_{i=1}^{n} R_i = \Sigma P_u \Rightarrow \sum_{i=1}^{n} k(\Delta_z + \theta_y x_i + \theta_x y_i) = \Sigma P_u")
+    st.markdown("เนื่องจากแกนอ้างอิงอยู่ที่จุด C.G. ส่งผลให้ผลรวมพิกัด $\sum x_i = 0$ และ $\sum y_i = 0$ (พจน์คูณโมเมนต์ของการหมุนจึงตัดกันเป็นศูนย์):")
+    st.latex(r"n \cdot k \cdot \Delta_z = \Sigma P_u \Rightarrow \Delta_z = \frac{\Sigma P_u}{n \cdot k}")
 
-    st.markdown("**4. สมการสมดุลโมเมนต์ (Moment Equilibrium Matrix)**")
-    st.markdown("โมเมนต์รอบแกน C.G. เกิดจากผลรวมของแรงเสาเข็มคูณระยะทาง:")
-    st.latex(r"\vec{M}_{cg} = \begin{bmatrix} M_y \\ M_x \end{bmatrix} = \sum_{i=1}^{n} R_i \vec{r}_i = \sum_{i=1}^{n} k (\Delta_z + \theta_y x_i + \theta_x y_i) \begin{bmatrix} x_i \\ y_i \end{bmatrix}")
-    st.markdown("ดึงตัวร่วมและจัดรูปให้อยู่ในรูปเมทริกซ์ความเฉื่อย (Inertia Matrix, $\mathbf{J}$):")
+    st.markdown("**ขั้นตอนที่ 4: สมการสมดุลโมเมนต์ในรูปเมทริกซ์ (Moment Equilibrium Matrix)**")
+    st.latex(r"\vec{M}_{cg} = \begin{bmatrix} M_y \\ M_x \end{bmatrix} = \sum_{i=1}^{n} R_i \vec{r}_i = k \sum_{i=1}^{n} (\Delta_z + \theta_y x_i + \theta_x y_i) \begin{bmatrix} x_i \\ y_i \end{bmatrix}")
+    st.markdown("จัดรูปสมการให้อยู่ในรูปเมทริกซ์ความเฉื่อยของกลุ่มเสาเข็ม (Pile Group Inertia Matrix, $\mathbf{J}$):")
     st.latex(r"\begin{bmatrix} M_y \\ M_x \end{bmatrix} = k \begin{bmatrix} \sum x_i^2 & \sum x_i y_i \\ \sum x_i y_i & \sum y_i^2 \end{bmatrix} \begin{bmatrix} \theta_y \\ \theta_x \end{bmatrix} = k \mathbf{J} \vec{\theta}")
     
-    st.markdown("หากจัดกลุ่มเสาเข็มแบบสมมาตร ผลคูณข้าม $\sum x_i y_i = 0$ จะสามารถแก้สมการหา $\vec{\theta}$ ได้ดังนี้:")
+    st.markdown("สำหรับกลุ่มเสาเข็มที่วางตัวสมมาตร ค่าผลคูณร่วมพิกัดเยื้องเชิงเส้น $\sum x_i y_i = 0$ จะได้เวกเตอร์มุมหมุนคือ:")
     st.latex(r"\theta_y = \frac{M_y}{k \sum x_i^2}, \quad \theta_x = \frac{M_x}{k \sum y_i^2}")
 
-    st.markdown("**5. บทสรุปสมการ (Final General Equation)**")
-    st.markdown("นำ $\Delta_z, \theta_y, \theta_x$ แทนกลับลงในสมการ $R_i = k \cdot \delta_i$ (สังเกตว่าค่า $k$ จะตัดกันไปเอง):")
-    st.latex(r"R_i = \frac{P_{ult}}{n} + \frac{M_y}{\sum x_i^2}x_i + \frac{M_x}{\sum y_i^2}y_i")
-    st.latex(r"\text{หรือเขียนในรูปเวกเตอร์: } R_i = \frac{P_{ult}}{n} + \vec{M}_{cg}^T \mathbf{J}^{-1} \vec{r}_i")
-    st.info("💡 **ข้อสังเกต:** สมการนี้ครอบคลุมแม้ในกรณีที่กลุ่มเสาเข็มไม่สมมาตร ($\sum xy \neq 0$) โดยใช้ Inverse ของเมทริกซ์ $\mathbf{J}$ เข้ามาจัดการได้โดยตรงเลยครับ")
-    # ---------------------------------------------------------
-    # ---------------------------------------------------------
-    # แทรกโค้ดนี้ต่อจากหัวข้อ "2. Loads" ใน with tab_calc:
-    # ---------------------------------------------------------
-    st.markdown("### 2.1 แรงปฏิกิริยาเสาเข็มแต่ละต้น (Pile Reactions - Rigid Cap Method)")
-    st.markdown("คำนวณตรวจสอบด้วยสมมติฐานฐานรากแข็งเกร็ง (Rigid Pile Cap) สำหรับใช้ตรวจสอบค่าเบื้องต้นกับวิธี FDM:")
+    st.markdown("**ขั้นตอนที่ 5: สมการคำนวณแรงปฏิกิริยาสรุป (Final Rigid Cap Equation)**")
+    st.markdown("แทนค่าการเคลื่อนตัว $\Delta_z, \theta_y, \theta_x$ กลับลงไปในสมการแรงกดของเข็ม (ค่าความแข็งสปริง $k$ จะตัดกันหมดไปเอง):")
+    st.latex(r"R_i = \frac{\Sigma P_u}{n} + \frac{M_y}{\sum x_i^2}x_i + \frac{M_x}{\sum y_i^2}y_i")
+    st.latex(r"\text{หรือเขียนในรูปแบบเวกเตอร์-เมทริกซ์สากล: } R_i = \frac{\Sigma P_u}{n} + \vec{M}_{cg}^T \mathbf{J}^{-1} \vec{r}_i")
+    st.divider()
+
+    # =========================================================
+    # 4. Pile Reactions Calculation
+    # =========================================================
+    st.markdown("### 4. การคำนวณแรงปฏิกิริยาเสาเข็มรายต้น (Pile Reactions Validation)")
     
-    # คำนวณโมเมนต์ลัพธ์รอบจุด C.G. ของกลุ่มเสาเข็ม
+    # ย้ายพจน์โมเมนต์ลัพธ์รอบ C.G. มาคำนวณตรงนี้เพื่อความต่อเนื่อง
     Mx_tot = Mu_cx + P_u_tot * (-ecc_y)
     My_tot = Mu_cy + P_u_tot * (-ecc_x)
     
-    # แสดงสมการหลัก
-    st.latex(r"R_i = \frac{\Sigma P_u}{n} \pm \frac{M_{x,cg} \cdot y_i}{\sum y^2} \pm \frac{M_{y,cg} \cdot x_i}{\sum x^2}")
-    
-    # แสดงค่าโมเมนต์และ I
-    st.markdown("**โมเมนต์ลัพธ์รอบจุดศูนย์ถ่วง (C.G.):**")
+    st.markdown("**โมเมนต์ลัพธ์และโมเมนต์เฉื่อยรอบจุดศูนย์ถ่วงกลุ่มเสาเข็ม (C.G.):**")
     st.latex(rf"M_{{x,cg}} = M_{{ux}} + \Sigma P_u(-e_y) = {Mu_cx:.2f} + ({P_u_tot:.2f})({-ecc_y:.3f}) = {Mx_tot:.2f}\text{{ ton-m}}")
     st.latex(rf"M_{{y,cg}} = M_{{uy}} + \Sigma P_u(-e_x) = {Mu_cy:.2f} + ({P_u_tot:.2f})({-ecc_x:.3f}) = {My_tot:.2f}\text{{ ton-m}}")
-    
-    st.markdown("**ผลรวมกำลังสองของระยะเสาเข็ม (เทียบกับจุด C.G.):**")
     st.latex(rf"\sum x^2 = I_{{yy}} = {Iyy_grp:.3f}\text{{ m}}^2, \quad \sum y^2 = I_{{xx}} = {Ixx_grp:.3f}\text{{ m}}^2")
     
-    st.markdown("**แทนค่าหาแรงปฏิกิริยาเสาเข็มแต่ละต้น ($R_i$):**")
-    
-    # ลูปเพื่อแสดงการแทนค่าเสาเข็มทุกต้น
+    st.markdown("**แทนค่าคำนวณเปรียบเทียบเสาเข็มรายต้น ($R_i$):**")
+    st.markdown("รูปแบบสมการใช้งาน: $R_i = \\frac{\\Sigma P_u}{n} + \\frac{M_{x,cg} \\cdot y_i}{I_{xx}} + \\frac{M_{y,cg} \\cdot x_i}{I_{yy}}$")
+
+    # ลูปแสดงผลลัพธ์และการแทนค่าของเสาเข็มทุกต้น
     for i, (px, py) in enumerate(piles_act):
         rx = px - cgx  # ระยะ x เทียบกับ CG
         ry = py - cgy  # ระยะ y เทียบกับ CG
         
-        # คำนวณแต่ละพจน์
+        # คำนวณแต่ละพจน์ย่อย
         term_P = P_u_tot / n_piles
         term_Mx = (Mx_tot * ry) / Ixx_grp
         term_My = (My_tot * rx) / Iyy_grp
         R_rigid = term_P + term_Mx + term_My
-        R_fdm = p_ult_out[i] # ค่าจาก FDM ที่โปรแกรมหลักคำนวณไว้
+        R_fdm = p_ult_out[i] # ค่ากำลังปฏิกิริยาจริงจาก Finite Difference Engine
         
-        # จัด Format เครื่องหมาย + - ให้สวยงาม
+        # ตรวจสอบเครื่องหมายเพื่อนำไปแสดงผลในสมการให้สวยงาม
         sign_Mx = "+" if term_Mx >= 0 else "-"
         sign_My = "+" if term_My >= 0 else "-"
         
-        # แสดงสมการบรรทัดแรก: รูปแบบตัวแปร
+        # แสดงขั้นตอนการแทนค่าตัวเลข
         st.latex(rf"R_{{{i+1}}} = \frac{{{P_u_tot:.2f}}}{{{n_piles}}} + \frac{{({Mx_tot:.2f})({ry:.3f})}}{{{Ixx_grp:.3f}}} + \frac{{({My_tot:.2f})({rx:.3f})}}{{{Iyy_grp:.3f}}}")
-        # แสดงสมการบรรทัดสอง: ผลลัพธ์ (เปรียบเทียบกับ FDM)
-        st.latex(rf"R_{{{i+1}}} = {term_P:.2f} {sign_Mx} {abs(term_Mx):.2f} {sign_My} {abs(term_My):.2f} = \mathbf{{{R_rigid:.2f}\text{{ ton}}}} \quad \color{{gray}}{{\text{{(FDM = {R_fdm:.2f} ton)}}}}")
+        # แสดงผลลัพธ์สุดท้ายเปรียบเทียบกับวิธี FDM
+        st.latex(rf"R_{{{i+1}}} = {term_P:.2f} {sign_Mx} {abs(term_Mx):.2f} {sign_My} {abs(term_My):.2f} = \mathbf{{{R_rigid:.2f}\text{{ ton}}}} \quad \color{{gray}}{{\text{{(FDM Engine = {R_fdm:.2f} ton)}}}}")
     
-    st.info("💡 **หมายเหตุ:** ค่า FDM (สีเทา) คือค่าที่วิเคราะห์รวมผลจากการแอ่นตัวของแผ่นพื้นฐานราก (Flexibility) และสปริงดินแล้ว ซึ่งโปรแกรมจะนำค่า FDM นี้ไปใช้ออกแบบในขั้นตอนต่อไป")
-    # ---------------------------------------------------------
+    st.info("💡 **ข้อแนะนำเชิงวิศวกรรม:** ค่าแรงปฏิกิริยาในวงเล็บสีเทา (FDM Engine) พิจารณาความยืดหยุ่นของฐานราก (Flexibility) และสปริงของชั้นดิน/เสาเข็ม ซึ่งจะมีความแม่นยำสูงกว่าวิธี Rigid Cap และถูกนำไปใช้ในขั้นตอนการคำนวณเหล็กเสริมถัดไป")
     
     # 3. Plate rigidity
     st.markdown("### 3. แผ่นพื้นยืดหยุ่น (Flexural Rigidity) และโมเมนต์ดัด")
